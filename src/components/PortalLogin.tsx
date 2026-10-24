@@ -96,6 +96,8 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
 
   // Check if already authenticated
   useEffect(() => {
+    const wantsReset = new URLSearchParams(window.location.search).get("reset") === "true";
+    if (wantsReset) { setResetPassword(true); return; }
     fetch("/api/auth/me")
       .then((res) => res.json())
       .then((data) => {
@@ -103,6 +105,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           if (data.user.role === "partner") router.push("/partner");
           else if (data.user.role === "rider") router.push("/rider");
           else if (data.user.role === "admin") router.push("/admin");
+          else if (data.user.role === "customer") router.replace("/account");
         }
       })
       .catch(() => {});
@@ -325,7 +328,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           setSubmittedPending(true);
         } else {
           setSuccessMsg("Account created! Redirecting to food store...");
-          setTimeout(() => router.push("/"), 800);
+          setTimeout(() => router.push(data.user?.role === "admin" ? "/admin" : "/account"), 800);
         }
       } else {
         setErrorMsg(data.error || "Registration failed.");
@@ -363,7 +366,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           if (activeRole === "partner") router.push("/partner");
           else if (activeRole === "rider") router.push("/rider");
           else if (activeRole === "admin") router.push("/admin");
-          else router.push("/");
+          else router.push("/account");
         }, 800);
       } else {
         setErrorMsg(data.error || "Login failed. Please check your credentials.");

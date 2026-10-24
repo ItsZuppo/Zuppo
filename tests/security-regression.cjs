@@ -42,6 +42,7 @@ function load(file, overrides={}) {
 const delivery = load('src/lib/delivery.ts');
 const orders = load('src/app/api/orders/route.ts');
 const pins = load('src/app/api/orders/regenerate-pin/route.ts');
+const reorder = load('src/app/api/account/reorder/route.ts', {'@/lib/authBackend':{authBackend:()=>db}});
 const admin = load('src/app/api/admin/verifications/route.ts');
 const request = (body, url='http://localhost/api/orders') => ({url,json:async()=>body});
 const uid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -54,6 +55,8 @@ async function check(label, fn) {await fn(); count++; console.log('PASS '+label)
  await check('invalid/missing coordinates rejected',()=>{for(const pair of [[NaN,83],['23',83],[91,83],[23,undefined]])assert.equal(delivery.isServiceable(...pair),false);});
  await check('unauthenticated private order list denied',async()=>assert.equal((await orders.GET(request({}))).status,401));
  await check('unauthenticated order creation denied',async()=>assert.equal((await orders.POST(request({}))).status,401));
+ await check('unauthenticated reorder denied',async()=>assert.equal((await reorder.POST(request({orderId:uid}))).status,401));
+ await check('reorder lookup scopes by current customer',async()=>{user={id:'current-customer',role:'customer'};rows=[];calls=[];assert.equal((await reorder.POST(request({orderId:uid}))).status,404);assert.ok(calls[0].filters.some(f=>f[1]==='customer_id'&&f[2]==='current-customer'));user=null;});
  await check('public PIN regeneration denied',async()=>assert.equal((await pins.POST(request({orderId:uid}))).status,401));
  await check('admin KYC GET/POST deny anonymous',async()=>{assert.equal((await admin.GET()).status,401);assert.equal((await admin.POST(request({}))).status,401);});
  user={id:'intruder',role:'customer'};rows=[order];

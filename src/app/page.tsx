@@ -442,6 +442,16 @@ function FoodItemCard({
 }
 
 export default function CustomerHome() {
+  const [account, setAccount] = useState<{name:string; avatarUrl:string} | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<{id:string;label:string;address:string;lat:number;lng:number}[]>([]);
+  useEffect(() => {
+    fetch("/api/account", {cache:"no-store"}).then(r=>r.json()).then(data=>{
+      if (!data.success) return;
+      const p=data.profile;setAccount({name:p.name,avatarUrl:p.avatarUrl});setCustomerName(p.name);setCustomerPhone(p.phone);setSavedAddresses(p.addresses);
+      const selected=p.addresses.find((a:{id:string})=>a.id===p.defaultAddressId);
+      if(selected){setSelectedLocation(selected.label+", Ambikapur");setAddressDetails(selected.address);setDeliveryCoords({lat:selected.lat,lng:selected.lng});}
+    }).catch(()=>{});
+  }, []);
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [isVegOnly, setIsVegOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -451,8 +461,8 @@ export default function CustomerHome() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [placedOrderDetails, setPlacedOrderDetails] = useState<any>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [customerName, setCustomerName] = useState("Aryan Gupta");
-  const [customerPhone, setCustomerPhone] = useState("+91 98261 44551");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("Gandhi Chowk, Ambikapur");
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [deliveryCoords, setDeliveryCoords] = useState<{lat: number; lng: number} | null>(null);
@@ -721,8 +731,8 @@ export default function CustomerHome() {
 
 
 
-                <Link href="/login" className="px-3 py-1 rounded-full text-orange-600 bg-white shadow-xs font-black hover:bg-orange-600 hover:text-white transition flex items-center gap-1">
-                  <span>Login</span>
+                <Link href={account ? "/account" : "/login"} className="px-3 py-1 rounded-full text-orange-600 bg-white shadow-xs font-black hover:bg-orange-600 hover:text-white transition flex items-center gap-1">
+                  {account?.avatarUrl && <img src={account.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover"/>}<span>{account ? account.name.split(" ")[0] : "Login"}</span>
                 </Link>
               </div>
 
@@ -1112,6 +1122,7 @@ export default function CustomerHome() {
 
                 {/* Customer Details Inputs */}
                 <div className="space-y-2 pt-1">
+{savedAddresses.length > 0 && <label className="mb-3 block text-xs font-bold">Saved delivery address<select className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3" defaultValue="" onChange={e=>{const a=savedAddresses.find(a=>a.id===e.target.value);if(a){setSelectedLocation(a.label+", Ambikapur");setAddressDetails(a.address);setDeliveryCoords({lat:a.lat,lng:a.lng});}}}><option value="" disabled>Choose a saved address</option>{savedAddresses.map(a=><option key={a.id} value={a.id}>{a.label}: {a.address}</option>)}</select></label>}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Your Name</label>
@@ -1384,7 +1395,7 @@ export default function CustomerHome() {
         </button>
 
 
-                <Link href="/login" className="flex flex-col items-center gap-0.5 text-slate-500 hover:text-orange-600"><ShieldCheck className="w-5 h-5"/><span className="text-[10px] font-bold">Account</span></Link>
+                <Link href={account ? "/account" : "/login"} className="flex flex-col items-center gap-0.5 text-slate-500 hover:text-orange-600"><ShieldCheck className="w-5 h-5"/><span className="text-[10px] font-bold">Account</span></Link>
 
       </div>
 

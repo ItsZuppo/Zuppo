@@ -45,3 +45,11 @@ The regression suite mocks database/providers; no live OTP, order or private dat
 Auth integration: with the local server running, set RUN_AUTH_INTEGRATION=1 and run node tests/auth-integration.cjs. This explicitly creates and removes one disposable Supabase account, sends no emails, and tests proof binding, signup/login, role rejection, password recovery, replay rejection and old-session invalidation.
 
 The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Vercel. Confirm the latest Vercel deployment status separately. Required production values: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, AUTH_SECRET (32+ characters), BREVO_API_KEY and BREVO_SENDER_EMAIL. Local temporary accounts are deliberately disabled in production.
+
+## Customer account page
+- /account contains profile editing, R2 profile photos, saved addresses (add/remove/default), current GPS capture, order history, order tracking and reorder-to-cart.
+- Customer sign-in/signup redirects to /account; homepage reads the session and displays the customer's name/photo. Saved addresses are selectable at checkout.
+- Profile fields and saved addresses persist in auth.users.raw_user_meta_data through server-only authenticated APIs. No new table/schema migration is required. See supabase/customer-account-guide.sql for a read-only inspection query.
+- Avatar objects use avatars/<customer-id>/<random-id> in the existing R2 bucket. Customer upload permissions are restricted to that folder with size, MIME and signature checks.
+- Reorder only reads the current customer's order, checks the restaurant and current menu availability, and prepares a cart for review at current prices. It does not place an order or charge a payment.
+- Run RUN_ACCOUNT_INTEGRATION=1 node tests/account-integration.cjs with the local server running; ACCOUNT_TEST_BASE_URL can target the deployed website. The test creates/removes a disposable customer and sends no orders/emails.

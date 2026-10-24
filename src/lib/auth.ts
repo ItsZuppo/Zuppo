@@ -109,6 +109,7 @@ export function verifySession(token: string | undefined | null): AuthUser | null
   if (signature.length !== expectedSig.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) return null;
   try {
     const user = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+    if (user.developmentOnly && user.role === "customer") return null;
     if (user.developmentOnly && (process.env.NODE_ENV === "production" || process.env.ENABLE_TEMP_LOGIN !== "true")) return null;
     if (!user.id || !["customer", "partner", "rider", "admin"].includes(user.role) || !Number.isFinite(user.exp) || user.exp < Date.now()) return null;
     return user;
@@ -128,7 +129,7 @@ export async function getSessionUser(): Promise<AuthUser | null> {
     if (error || !data.user) return null;
     const changedAt = data.user.app_metadata?.password_changed_at;
     if (typeof changedAt === "number" && (!user.issuedAt || user.issuedAt < changedAt)) return null;
-    return user;
+    return { ...user, name: data.user.user_metadata?.full_name || user.name, phone: data.user.user_metadata?.phone || "" };
   } catch {
     return null;
   }
