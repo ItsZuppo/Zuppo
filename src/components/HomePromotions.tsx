@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Pause, Play, MapPin } from "lucide-react";

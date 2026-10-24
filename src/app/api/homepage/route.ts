@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { DEFAULT_HOME_SETTINGS, HomeSettings } from "@/lib/homeSettings";
@@ -16,6 +17,6 @@ export async function PUT(req:Request){
  const actor=await getSessionUser();if(!actor || actor.role!=="admin")return NextResponse.json({success:false,error:"Admin access required."},{status:actor?403:401});
  try{const b=await req.json();if(typeof b.announcementEnabled!=="boolean" || typeof b.carouselEnabled!=="boolean" || typeof b.announcement!=="string" || b.announcement.length>160 || !Number.isInteger(b.intervalSeconds) || b.intervalSeconds<3 || b.intervalSeconds>15 || !Array.isArray(b.restaurantIds) || b.restaurantIds.length>20 || b.restaurantIds.some((id:unknown)=>typeof id!=="string" || !/^[a-f0-9-]{36}$/i.test(id)))return NextResponse.json({success:false,error:"Check the announcement (160 characters max), slide timing (3–15 seconds) and selected restaurants."},{status:400});
  const settings:HomeSettings={announcementEnabled:b.announcementEnabled,announcement:b.announcement.trim(),carouselEnabled:b.carouselEnabled,intervalSeconds:b.intervalSeconds,restaurantIds:[...new Set<string>(b.restaurantIds)]};
- await storage().send(new PutObjectCommand({Bucket:bucket,Key:key,Body:JSON.stringify(settings),ContentType:"application/json",CacheControl:"no-cache"}));return NextResponse.json({success:true,settings});
+ await storage().send(new PutObjectCommand({Bucket:bucket,Key:key,Body:JSON.stringify(settings),ContentType:"application/json",CacheControl:"no-cache"}));revalidateTag("homepage-promotions",{expire:0});return NextResponse.json({success:true,settings});
  }catch{return NextResponse.json({success:false,error:"Homepage settings could not be saved."},{status:503});}
 }

@@ -1,3 +1,4 @@
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { authBackend } from "./authBackend";
@@ -122,20 +123,25 @@ export function verifySession(token: string | undefined | null): AuthUser | null
 }
 
 // Server-side session getter
-export async function getSessionUser(): Promise<AuthUser | null> {
+export async function getSessionContext(): Promise<{user:AuthUser;record:SupabaseUser|null} | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     const user = verifySession(token);
-    if (!user || user.developmentOnly) return user;
+    if (!user) return null;
+    if (user.developmentOnly) return {user,record:null};
     const { data, error } = await authBackend().auth.admin.getUserById(user.id);
     if (error || !data.user) return null;
     const changedAt = data.user.app_metadata?.password_changed_at;
     if (typeof changedAt === "number" && (!user.issuedAt || user.issuedAt < changedAt)) return null;
-    return { ...user, name: data.user.user_metadata?.full_name || user.name, phone: data.user.user_metadata?.phone || "", avatarUrl:data.user.user_metadata?.avatar_url || "", savedAddresses:data.user.user_metadata?.saved_addresses || [], defaultAddressId:data.user.user_metadata?.default_address_id || "" };
+    return {record:data.user,user:{ ...user, name: data.user.user_metadata?.full_name || user.name, phone: data.user.user_metadata?.phone || "", avatarUrl:data.user.user_metadata?.avatar_url || "", savedAddresses:data.user.user_metadata?.saved_addresses || [], defaultAddressId:data.user.user_metadata?.default_address_id || "" }};
   } catch {
     return null;
   }
+}
+
+export async function getSessionUser(): Promise<AuthUser | null> {
+  return (await getSessionContext())?.user || null;
 }
 
 // Temporary identities are explicitly local-only and stored as salted hashes in env.

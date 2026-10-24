@@ -1,27 +1,28 @@
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionContext } from "@/lib/auth";
 import { authBackend } from "@/lib/authBackend";
 import { isServiceable } from "@/lib/delivery";
 
 export interface SavedAddress { id: string; label: string; address: string; lat: number; lng: number; }
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
+function profileOf(record: Pick<SupabaseUser,"email"|"user_metadata">) {
+ const m=record.user_metadata || {};
+ return {name:m.full_name || "Customer",email:record.email,phone:m.phone || "",avatarUrl:m.avatar_url || "",addresses:m.saved_addresses || [],defaultAddressId:m.default_address_id || ""};
+}
 export async function GET() {
- const actor = await getSessionUser();
- if (!actor || actor.role !== "customer") return json({success:false,error:"Please sign in as a customer."},401);
- const {data,error} = await authBackend().auth.admin.getUserById(actor.id);
- if (error || !data.user) return json({success:false,error:"Could not load your account."},503);
- const m=data.user.user_metadata || {};
- return json({success:true,profile:{name:m.full_name || actor.name,email:data.user.email,phone:m.phone || "",avatarUrl:m.avatar_url || "",addresses:m.saved_addresses || [],defaultAddressId:m.default_address_id || ""}});
+ const context=await getSessionContext();
+ if(!context || context.user.role!=="customer" || !context.record)return json({success:false,error:"Please sign in as a customer."},401);
+ return json({success:true,profile:profileOf(context.record)});
 }
 export async function PATCH(req: Request) {
- const actor = await getSessionUser();
- if (!actor || actor.role !== "customer") return json({success:false,error:"Please sign in as a customer."},401);
+ const context = await getSessionContext();
+ const actor=context?.user;
+ if (!actor || actor.role !== "customer" || !context?.record) return json({success:false,error:"Please sign in as a customer."},401);
  try {
   const body=await req.json();const client=authBackend();
-  const {data,error}=await client.auth.admin.getUserById(actor.id);
-  if(error || !data.user) return json({success:false,error:"Account unavailable."},503);
-  const metadata=data.user.user_metadata || {};
+  const metadata=context.record.user_metadata || {};
   let addresses: SavedAddress[]=Array.isArray(metadata.saved_addresses)?metadata.saved_addresses:[];
   const changes: Record<string,unknown>={};
   if(body.action === "avatar") {
@@ -53,6 +54,6 @@ export async function PATCH(req: Request) {
   } else return json({success:false,error:"Unsupported account action."},400);
   const result=await client.auth.admin.updateUserById(actor.id,{user_metadata:changes});
   if(result.error) return json({success:false,error:"Changes could not be saved. Please retry."},503);
-  return json({success:true});
+  return json({success:true,profile:result.data.user ? profileOf(result.data.user) : null});
  } catch {return json({success:false,error:"Could not update your account."},400);}
 }

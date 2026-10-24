@@ -60,3 +60,10 @@ The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Ve
 - Global display settings persist in the existing R2 bucket at site/homepage.json. No Supabase schema change or SQL is needed. Public reads include only public banner/settings data; writes require admin.
 - Carousel uses actual restaurant banners, omits blocked restaurants, pauses on hover/focus and respects reduced-motion preferences. Settings refresh for open customer pages every minute; a reload gets them immediately.
 - Verified authenticated first HTML contains the profile rather than Login, banner HTML is present, customer settings writes return 403, invalid slide timing returns 400, and admin saves persist/read back correctly.
+
+## Responsiveness improvements
+- Account APIs reuse the fresh authenticated user record; profile reads no longer repeat the same Supabase Auth lookup. Successful writes return the updated profile so the browser does not need an immediate second GET.
+- Order history loads when its tab is opened, with loading feedback. Browser requests in customer/auth/home controls have a 15-second bound (explicit long uploads keep their own deadline); writes are never automatically retried.
+- Public homepage promotion data uses a 30-second Next data cache. Homepage settings and restaurant writes invalidate its tag. Customer identity/session/profile data remains uncached and password-reset revocation remains fresh.
+- Removed artificial login/signup redirect pauses and kept the submit button pending during navigation. Added route loading feedback and account mutation status text.
+- Removed the duplicate external unpkg Leaflet stylesheet from the root; the map already imports its installed local CSS.

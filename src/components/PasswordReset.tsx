@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 
 import { useEffect, useState } from "react";
 

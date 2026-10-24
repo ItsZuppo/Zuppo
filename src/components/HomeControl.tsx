@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 import { useEffect, useState } from "react";
 import { DEFAULT_HOME_SETTINGS, HomeSettings } from "@/lib/homeSettings";
 type Restaurant={id:string;name:string;banner_url:string;is_blocked:boolean};

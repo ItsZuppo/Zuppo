@@ -1,8 +1,9 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 
 import BrandLogo from "@/components/BrandLogo";
 import PasswordReset from "@/components/PasswordReset";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -40,6 +41,8 @@ type AuthMode = "login" | "register";
 
 export default function PortalLogin({ role = "customer" }: { role?: RoleType }) {
   const router = useRouter();
+  const [isNavigating, startNavigation] = useTransition();
+  const navigate = (path: string) => startNavigation(() => router.push(path));
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [resetPassword, setResetPassword] = useState(false);
   const activeRole = role;
@@ -102,9 +105,9 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user && data.user.role === role) {
-          if (data.user.role === "partner") router.push("/partner");
-          else if (data.user.role === "rider") router.push("/rider");
-          else if (data.user.role === "admin") router.push("/admin");
+          if (data.user.role === "partner") navigate("/partner");
+          else if (data.user.role === "rider") navigate("/rider");
+          else if (data.user.role === "admin") navigate("/admin");
           else if (data.user.role === "customer") router.replace("/account");
         }
       })
@@ -328,7 +331,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           setSubmittedPending(true);
         } else {
           setSuccessMsg("Account created! Redirecting to food store...");
-          setTimeout(() => router.push(data.user?.role === "admin" ? "/admin" : "/account"), 800);
+          navigate(data.user?.role === "admin" ? "/admin" : "/account");
         }
       } else {
         setErrorMsg(data.error || "Registration failed.");
@@ -362,12 +365,12 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
 
       if (data.success) {
         setSuccessMsg(`Welcome back to zuppo! Redirecting...`);
-        setTimeout(() => {
-          if (activeRole === "partner") router.push("/partner");
-          else if (activeRole === "rider") router.push("/rider");
-          else if (activeRole === "admin") router.push("/admin");
-          else router.push("/account");
-        }, 800);
+        {
+          if (activeRole === "partner") navigate("/partner");
+          else if (activeRole === "rider") navigate("/rider");
+          else if (activeRole === "admin") navigate("/admin");
+          else navigate("/account");
+        }
       } else {
         setErrorMsg(data.error || "Login failed. Please check your credentials.");
       }
@@ -392,7 +395,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
       .then((d) => {
         if (d.success) {
           setSuccessMsg(`Welcome, ${d.user.name}!`);
-          setTimeout(() => router.push(targetPath), 600);
+          navigate(targetPath);
         } else {
           setErrorMsg(d.error || "Login failed");
           setLoading(false);
@@ -616,10 +619,10 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
 
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || isNavigating}
                     className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 disabled:opacity-50 text-white font-black text-xs py-3.5 px-4 rounded-2xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {loading ? (
+                    {loading || isNavigating ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Signing in to zuppo...</span>
@@ -898,10 +901,10 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                       {activeRole === "customer" ? (
                         <button
                           type="submit"
-                          disabled={loading}
+                          disabled={loading || isNavigating}
                           className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 disabled:opacity-50 text-white font-black text-xs py-3.5 px-4 rounded-2xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          {loading ? (
+                          {loading || isNavigating ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
                               <span>Creating Account...</span>
@@ -1108,10 +1111,10 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
 
                         <button
                           type="submit"
-                          disabled={loading}
+                          disabled={loading || isNavigating}
                           className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 disabled:opacity-50 text-white font-black text-xs py-3.5 px-4 rounded-2xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          {loading ? (
+                          {loading || isNavigating ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
                               <span>Submitting Application to Admin...</span>

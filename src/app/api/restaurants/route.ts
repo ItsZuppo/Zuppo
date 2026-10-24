@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    revalidateTag("homepage-promotions",{expire:0});
     return NextResponse.json({
       success: true,
       message: "Restaurant added successfully!",
@@ -117,6 +119,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    revalidateTag("homepage-promotions",{expire:0});
     return NextResponse.json({
       success: true,
       message: "Restaurant updated successfully",

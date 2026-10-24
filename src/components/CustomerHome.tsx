@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 
 import BrandLogo from "@/components/BrandLogo";
 import type { HomeBanner, HomeSettings } from "@/lib/homeSettings";
