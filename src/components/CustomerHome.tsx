@@ -450,7 +450,7 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
   const [savedAddresses, setSavedAddresses] = useState<{id:string;label:string;address:string;lat:number;lng:number}[]>(initialProfile?.addresses || []);
   useEffect(() => {
     fetch("/api/account", {cache:"no-store"}).then(r=>r.json()).then(data=>{
-      if (!data.success) return;
+      if (!data.success) {setAccount(null);setSavedAddresses([]);return;}
       const p=data.profile;setAccount({name:p.name,avatarUrl:p.avatarUrl});setCustomerName(p.name);setCustomerPhone(p.phone);setSavedAddresses(p.addresses);
       const selected=p.addresses.find((a:{id:string})=>a.id===p.defaultAddressId);
       if(selected){setSelectedLocation(selected.label+", Ambikapur");setAddressDetails(selected.address);setDeliveryCoords({lat:selected.lat,lng:selected.lng});}

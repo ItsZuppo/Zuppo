@@ -1,7 +1,8 @@
+import { cookies } from "next/headers";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { getSessionContext } from "@/lib/auth";
+import { getSessionContext, signSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { authBackend } from "@/lib/authBackend";
 import { isServiceable } from "@/lib/delivery";
 
@@ -54,6 +55,11 @@ export async function PATCH(req: Request) {
   } else return json({success:false,error:"Unsupported account action."},400);
   const result=await client.auth.admin.updateUserById(actor.id,{user_metadata:changes});
   if(result.error) return json({success:false,error:"Changes could not be saved. Please retry."},503);
+  if(result.data.user){
+   const profile=profileOf(result.data.user);
+   const token=signSession({id:actor.id,role:actor.role,name:profile.name,email:profile.email,phone:profile.phone,avatarUrl:profile.avatarUrl});
+   (await cookies()).set(SESSION_COOKIE_NAME,token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",maxAge:60*60*24*30,path:"/"});
+  }
   return json({success:true,profile:result.data.user ? profileOf(result.data.user) : null});
  } catch {return json({success:false,error:"Could not update your account."},400);}
 }

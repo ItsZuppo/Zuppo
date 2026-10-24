@@ -202,6 +202,7 @@ export async function POST(req: Request) {
           id: supaAuth.user.id,
           role: "customer",
           name: meta.full_name || "Ambikapur Customer",
+          avatarUrl: typeof meta.avatar_url === "string" ? meta.avatar_url : "",
           email: supaAuth.user.email,
           phone: meta.phone,
         };

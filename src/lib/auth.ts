@@ -122,6 +122,12 @@ export function verifySession(token: string | undefined | null): AuthUser | null
   }
 }
 
+/** Display hints only. Never use this to authorize data reads or mutations. */
+export async function getDisplaySession(): Promise<AuthUser | null> {
+ try {return verifySession((await cookies()).get(SESSION_COOKIE_NAME)?.value);}
+ catch {return null;}
+}
+
 // Server-side session getter
 export async function getSessionContext(): Promise<{user:AuthUser;record:SupabaseUser|null} | null> {
   try {
