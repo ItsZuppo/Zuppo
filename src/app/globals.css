@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Portal workspaces: shared interaction rhythm with separate role entrances. */
+:root { --portal-accent: #ea580c; }
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), a { touch-action: manipulation; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+:where(button, a, input, select, textarea):focus-visible { outline: 3px solid #fb923c; outline-offset: 3px; }
+.portal-workspace { min-height: 100dvh; background: #0f172a; }
+.portal-session { min-height: 48px; padding: 10px clamp(16px, 3vw, 32px); display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #cbd5e1; background: #080e1c; border-bottom: 1px solid #263247; font-size: 12px; }
+.portal-session b { color: #fb923c; font-size: 19px; letter-spacing: -.8px; }
+.portal-session-divider { margin: 0 12px; color: #475569; }
+.portal-session-account { display:flex; align-items:center; gap:16px; }
+.portal-session button { border:1px solid #344155; border-radius:10px; padding:7px 12px; color:#e2e8f0; transition: background .18s ease, border-color .18s ease; }
+.portal-session button:hover { background:#1e293b; border-color:#fb923c; }
+.portal-entry-label { display:flex; align-items:center; justify-content:center; gap:9px; font-size:12px; font-weight:700; color:#57534e; padding:12px; }
+.portal-entry-dot { width:7px; height:7px; background:#ea580c; border-radius:50%; box-shadow:0 0 0 4px #ffedd5; }
+.portal-workspace :where(button, a) { transition: color .16s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.portal-workspace :where(input, select, textarea) { transition:border-color .16s ease, box-shadow .16s ease; }
+.portal-workspace :where(button):active:not(:disabled) { transform:translateY(1px); }
+.portal-workspace main { animation:portal-enter .24s ease-out; }
+.portal-workspace table { border-collapse:separate; border-spacing:0; }
+.portal-workspace tbody tr { transition:background-color .16s ease; }
+.portal-workspace tbody tr:hover { background:rgb(148 163 184 / .045); }
+.portal-mobile-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; background:#0b1220; border-bottom:1px solid #263247; scrollbar-width:thin; }
+.portal-mobile-tabs button { flex-shrink:0; padding:9px 14px; border:1px solid #334155; border-radius:12px; font-size:12px; font-weight:700; color:#cbd5e1; }
+.portal-mobile-tabs button[aria-current] { color:white; background:#c2410c; border-color:#ea580c; box-shadow:0 4px 12px #ea580c22; }
+.portal-loading { min-height:100dvh; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:16px; background:#0f172a; color:#cbd5e1; font-size:13px; }
+.portal-spinner { height:30px; width:30px; border:3px solid #334155; border-top-color:#fb923c; border-radius:50%; animation:portal-spin .7s linear infinite; }
+.portal-skeleton { height:64px; width:min(80vw,440px); border-radius:16px; background:linear-gradient(90deg,#172033,#25314a,#172033); background-size:200% 100%; animation:portal-shimmer 1.4s ease infinite; }
+.leaflet-container { font-family:inherit; background:#e8ede5; }
+.leaflet-control-attribution { max-width:90vw; font-size:10px!important; background:rgba(255,255,255,.94)!important; border-radius:6px 0 0 0; }
+@keyframes portal-enter { from { opacity:.5; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+@keyframes portal-spin { to { transform:rotate(360deg); } }
+@keyframes portal-shimmer { to { background-position:-200% 0; } }
+@media (min-width:1024px) { .portal-mobile-tabs { display:none; } }
+@media (max-width:640px) { .portal-session { font-size:11px; } .portal-session-account { gap:8px; max-width:48%; } .portal-session-account { overflow:hidden; } .portal-session button { flex-shrink:0; } }
+@media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } *, *::before, *::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }

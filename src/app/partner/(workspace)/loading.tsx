@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="portal-loading" role="status"><span className="portal-spinner"/><p>Opening your workspace...</p><div className="portal-skeleton"/><div className="portal-skeleton"/></div>; }
