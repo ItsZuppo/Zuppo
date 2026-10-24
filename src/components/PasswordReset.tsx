@@ -30,7 +30,7 @@ export default function PasswordReset({ initialEmail, onBack }: { initialEmail: 
       if (!result.success) { setError(result.error || "Please try again."); return; }
       setMessage(result.message);
       if (sent) { setSent(false); setOtp(""); setPassword(""); setConfirm(""); }
-      else { setSent(true); setCooldown(60); }
+      else { setSent(true); setCooldown(15); }
     } catch { setError("Could not connect. Please try again."); }
     finally { setBusy(false); }
   }

@@ -30,6 +30,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Heart,
+  UserRound,
 } from "lucide-react";
 
 interface MenuItem {
@@ -766,9 +767,11 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
                   <span className="xs:hidden text-[11px] font-bold">0</span>
                 )}
               </button>
-              <Link href={account ? "/account" : "/login"} aria-label={account ? "Open your profile" : "Sign in"} className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-orange-100 bg-orange-50 p-1.5 pr-3 text-orange-700 transition hover:bg-orange-100">
-                {account?.avatarUrl ? <img src={account.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover"/> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-sm font-black">{account ? account.name.slice(0,1).toUpperCase() : <ShieldCheck className="h-4 w-4"/>}</span>}
-                <span className="hidden max-w-24 truncate text-xs font-bold sm:block">{account ? account.name.split(" ")[0] : "Sign in"}</span>
+              <Link href={account ? "/account" : "/login"} aria-label={account ? "Open your profile" : "Login"} className="group ml-1 flex w-12 shrink-0 flex-col items-center gap-1 text-stone-700">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-orange-200 bg-orange-50 ring-2 ring-white transition group-hover:border-orange-500 group-hover:bg-orange-100">
+                  {account?.avatarUrl ? <img src={account.avatarUrl} alt="" className="h-full w-full rounded-full object-cover"/> : <UserRound className="h-5 w-5 text-orange-600" strokeWidth={1.8}/>}
+                </span>
+                <span className="text-[10px] font-bold leading-none">{account ? "Profile" : "Login"}</span>
               </Link>
             </div>
           </div>

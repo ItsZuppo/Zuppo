@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({success:false,error:"Enter a valid email address."},{status:400});
   const cookieStore = await cookies();
-  if (cookieStore.get("zuppo_otp_cooldown")) return NextResponse.json({success:false,error:"Please wait 60 seconds before requesting another code."},{status:429});
+  if (cookieStore.get("zuppo_otp_cooldown")) return NextResponse.json({success:false,error:"Please wait 15 seconds before requesting another code."},{status:429});
   const recovery = body.purpose === "recovery";
   const client = authBackend();
   let {data,error} = await client.auth.admin.generateLink(recovery ? {type:"recovery",email} : {type:"signup",email,password:randomBytes(32).toString("base64url")});
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     }
   }
   const options = {httpOnly:true,sameSite:"strict" as const,secure:process.env.NODE_ENV==="production",path:"/"};
-  cookieStore.set("zuppo_otp_cooldown","1",{...options,maxAge:60});
+  cookieStore.set("zuppo_otp_cooldown","1",{...options,maxAge:15});
   if (error || !data.properties?.email_otp) {
    if (recovery && error?.code==="user_not_found") return NextResponse.json({success:true,message:"If this email has an account, a reset code will arrive shortly."});
    console.error("OTP generation failed",error?.code,error?.status);

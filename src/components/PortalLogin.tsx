@@ -155,7 +155,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
       const data = await res.json();
       if (data.success) {
         setOtpSent(true);
-        setResendCountdown(60);
+        setResendCountdown(15);
         setSuccessMsg(`Verification code sent to ${email}. Check your inbox and spam folder.`);
       } else {
         setErrorMsg(data.error || "Failed to send OTP email.");
