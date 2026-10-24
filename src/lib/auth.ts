@@ -13,6 +13,9 @@ export interface AuthUser {
   vehicle?: string;
   developmentOnly?: boolean;
   issuedAt?: number;
+  avatarUrl?: string;
+  savedAddresses?: {id:string;label:string;address:string;lat:number;lng:number}[];
+  defaultAddressId?: string;
 }
 
 function authSecret(): string {
@@ -129,7 +132,7 @@ export async function getSessionUser(): Promise<AuthUser | null> {
     if (error || !data.user) return null;
     const changedAt = data.user.app_metadata?.password_changed_at;
     if (typeof changedAt === "number" && (!user.issuedAt || user.issuedAt < changedAt)) return null;
-    return { ...user, name: data.user.user_metadata?.full_name || user.name, phone: data.user.user_metadata?.phone || "" };
+    return { ...user, name: data.user.user_metadata?.full_name || user.name, phone: data.user.user_metadata?.phone || "", avatarUrl:data.user.user_metadata?.avatar_url || "", savedAddresses:data.user.user_metadata?.saved_addresses || [], defaultAddressId:data.user.user_metadata?.default_address_id || "" };
   } catch {
     return null;
   }

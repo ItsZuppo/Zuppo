@@ -53,3 +53,10 @@ The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Ve
 - Avatar objects use avatars/<customer-id>/<random-id> in the existing R2 bucket. Customer upload permissions are restricted to that folder with size, MIME and signature checks.
 - Reorder only reads the current customer's order, checks the restaurant and current menu availability, and prepares a cart for review at current prices. It does not place an order or charge a payment.
 - Run RUN_ACCOUNT_INTEGRATION=1 node tests/account-integration.cjs with the local server running; ACCOUNT_TEST_BASE_URL can target the deployed website. The test creates/removes a disposable customer and sends no orders/emails.
+
+## Homepage presentation controls
+- The homepage is now server-rendered with the signed-in customer profile and restaurant carousel data, avoiding the initial Login/name flash. The profile avatar is the last control on the right.
+- Admin > Homepage & Banners controls announcement visibility/text, carousel visibility, selected restaurants, slide order and 3–15 second timing. Banner uploads update the selected restaurant's existing banner.
+- Global display settings persist in the existing R2 bucket at site/homepage.json. No Supabase schema change or SQL is needed. Public reads include only public banner/settings data; writes require admin.
+- Carousel uses actual restaurant banners, omits blocked restaurants, pauses on hover/focus and respects reduced-motion preferences. Settings refresh for open customer pages every minute; a reload gets them immediately.
+- Verified authenticated first HTML contains the profile rather than Login, banner HTML is present, customer settings writes return 403, invalid slide timing returns 400, and admin saves persist/read back correctly.

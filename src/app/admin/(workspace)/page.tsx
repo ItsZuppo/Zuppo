@@ -1,6 +1,7 @@
 "use client";
 
 import BrandLogo from "@/components/BrandLogo";
+import HomeControl from "@/components/HomeControl";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -57,7 +58,7 @@ export interface LiveOrderData {
 }
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "orders" | "restaurants" | "categories" | "verifications" | "riders" | "payouts">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "orders" | "restaurants" | "categories" | "verifications" | "riders" | "payouts" | "homepage">("dashboard");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [liveOrders, setLiveOrders] = useState<LiveOrderData[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
@@ -545,6 +546,7 @@ export default function AdminDashboard() {
       badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} Pending` : undefined,
     },
     { id: "restaurants", label: "Restaurants", icon: Store, count: `${restaurants.length}` },
+    { id: "homepage", label: "Homepage & Banners", icon: ImageIcon },
     { id: "categories", label: "Food Categories", icon: Utensils, count: `${categories.length}` },
     { id: "riders", label: "Rider Fleet", icon: Bike, count: `${riders.filter((r) => r.isOnline).length} Online` },
     { id: "payouts", label: "Weekly Payouts", icon: Banknote },
@@ -711,6 +713,7 @@ export default function AdminDashboard() {
         <main className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 pb-24">
 
           {/* TAB 1: DASHBOARD OVERVIEW */}
+          {activeTab === "homepage" && <HomeControl/>}
           {activeTab === "dashboard" && (
             <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
               <div>
