@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -320,7 +321,7 @@ export default function ProductDetailPage() {
             z
           </span>
           <span className="text-sm font-black text-stone-900 tracking-tight">
-            zuppo<span className="text-orange-600">.</span>
+            <BrandLogo size={44} />
           </span>
         </Link>
 

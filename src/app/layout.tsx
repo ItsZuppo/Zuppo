@@ -13,7 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "zuppo. - Food, Fast & Fresh",
+  title: "Zuppo - Food Delivery in Ambikapur",
+  icons: { icon: "/zuppo-logo.png", apple: "/zuppo-logo.png" },
   description: "Hyperlocal food delivery network in Ambikapur",
 };
 
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>

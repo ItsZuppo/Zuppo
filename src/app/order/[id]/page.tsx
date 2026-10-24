@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -196,12 +197,7 @@ export default function OrderTrackingPage() {
 
         {/* Brand */}
         <Link href="/" className="flex items-center gap-1.5 group">
-          <span className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center font-black text-xs">
-            z
-          </span>
-          <span className="text-sm font-black text-stone-900 tracking-tight">
-            zuppo<span className="text-orange-600">.</span>
-          </span>
+          <BrandLogo size={44} />
         </Link>
 
         <span className="text-[11px] font-bold text-stone-500">

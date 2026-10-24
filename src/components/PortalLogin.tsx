@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -418,17 +419,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           {/* Logo & Header Title */}
           <div className="text-center space-y-2">
             <Link href="/" className="inline-flex items-center gap-2.5 group">
-              <span className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-xl shadow-orange-500/20 group-hover:scale-105 group-hover:rotate-2 transition-all duration-300">
-                z
-              </span>
-              <div className="text-left">
-                <span className="text-3xl font-black tracking-tight text-stone-900 block leading-tight">
-                  zuppo<span className="text-orange-600">.</span>
-                </span>
-                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block leading-none">
-                  Food, Fast & Fresh
-                </span>
-              </div>
+              <BrandLogo size={128} className="rounded-3xl shadow-lg shadow-orange-500/10" />
             </Link>
 
             <h1 className="text-xl sm:text-2xl font-black text-stone-900 pt-1 tracking-tight">

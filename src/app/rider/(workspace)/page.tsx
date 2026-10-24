@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -425,9 +426,7 @@ export default function RiderDashboard() {
         <header className="bg-white px-5 py-3.5 border-b border-[#EDE5DA] flex items-center justify-between sticky top-0 z-30 shadow-xs">
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-black text-stone-900 text-lg tracking-tight">
-                zuppo<span className="text-orange-600">.</span>
-              </span>
+              <BrandLogo size={48} />
               <span className="bg-orange-100 text-orange-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-orange-200">
                 Rider Fleet
               </span>

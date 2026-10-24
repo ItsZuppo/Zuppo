@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import { isServiceable } from "@/lib/delivery";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -699,17 +700,7 @@ export default function CustomerHome() {
             {/* Logo & City Selector */}
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <Link href="/" className="flex items-center gap-2 group shrink-0">
-                <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-orange-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-lg shadow-orange-600/30 group-hover:scale-105 transition">
-                  A
-                </span>
-                <div className="hidden xs:block">
-                  <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900 group-hover:text-orange-600 transition">
-                    AmbiBites
-                  </span>
-                  <span className="block text-[8px] sm:text-[9px] font-black text-orange-600 uppercase tracking-widest leading-none">
-                    Ambikapur Express
-                  </span>
-                </div>
+                <BrandLogo size={58} />
               </Link>
 
               {/* Address Selector Pill (Visible on all screens) */}
@@ -1335,7 +1326,7 @@ export default function CustomerHome() {
             <span className="w-6 h-6 rounded-lg bg-orange-600 text-white font-black text-xs flex items-center justify-center">
               A
             </span>
-            <span className="font-bold text-slate-700">AmbiBites</span>
+            <BrandLogo size={44} />
             <span>• Hyperlocal Food Delivery for Ambikapur City</span>
           </div>
           <div className="flex items-center gap-4 text-slate-500 font-bold">

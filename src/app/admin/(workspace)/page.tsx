@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -566,12 +567,10 @@ export default function AdminDashboard() {
           {/* Brand Logo */}
           <div className="p-6 border-b border-slate-800/80">
             <Link href="/" className="flex items-center gap-2 group">
-              <span className="w-9 h-9 rounded-2xl bg-orange-600 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-orange-600/30">
-                A
-              </span>
+              <BrandLogo size={52} />
               <div>
                 <h1 className="text-lg font-black tracking-tight text-white group-hover:text-orange-400 transition">
-                  AmbiBites
+                  Zuppo
                 </h1>
                 <p className="text-[10px] text-orange-400 font-extrabold uppercase tracking-wider">
                   Master Control

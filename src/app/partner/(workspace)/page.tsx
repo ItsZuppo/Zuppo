@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/BrandLogo";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -663,9 +664,7 @@ export default function RestaurantPartnerHub() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Brand & Kitchen Switcher */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-orange-600/20">
-              <ChefHat className="w-5 h-5" />
-            </div>
+            <BrandLogo size={50} />
 
             {/* Active Kitchen Selector or Locked Partner Card */}
             {currentUser?.role === "partner" ? (
