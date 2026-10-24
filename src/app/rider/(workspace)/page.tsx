@@ -1,6 +1,7 @@
 "use client";
 
 import BrandLogo from "@/components/BrandLogo";
+import { shouldSyncRiderLocation } from "@/lib/riderGps";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -99,8 +100,22 @@ export default function RiderDashboard() {
 
   // Live GPS Tracking & Synchronization
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<"active" | "simulated" | "denied">("simulated");
+  const [gpsStatus, setGpsStatus] = useState<"active" | "simulated" | "denied" | "idle" | "requesting" | "error">("idle");
+  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState("");
+  const startGps = () => {
+    setGpsEnabled(false);
+    if (!window.isSecureContext || !navigator.geolocation) { setGpsStatus("error"); setGpsMessage("GPS needs HTTPS. Open the live website in your phone browser."); return; }
+    setGpsStatus("requesting"); setGpsMessage("Waiting for location permission / GPS…");
+    navigator.geolocation.getCurrentPosition(pos => {
+      setGpsCoords({lat:pos.coords.latitude,lng:pos.coords.longitude});
+      setGpsStatus("active"); setGpsEnabled(true); setIsOnline(true);
+      setGpsMessage("GPS enabled. Location is shared only for your assigned active delivery.");
+    }, err => { setGpsStatus(err.code === 1 ? "denied" : "error"); setGpsMessage(err.code === 1 ? "Location is blocked. Open your browser site settings, allow Location, then tap Retry GPS." : "Could not get a GPS fix. Turn on phone Location and retry outdoors."); }, {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  };
   const lastBroadcastRef = useRef<{ lat: number; lng: number } | null>(null);
+  const syncInFlightRef = useRef(false);
+  const lastBroadcastOrderRef = useRef<string | null>(null);
   const ordersRef = useRef<RiderOrder[]>([]);
   const userRef = useRef<any>(null);
   const [simIndex, setSimIndex] = useState(0);
@@ -115,14 +130,15 @@ export default function RiderDashboard() {
     [23.11559, 83.20455], // 6. Kedarpur (Customer Drop)
   ];
 
-  // Automatic GPS Watcher (Requests permission automatically on load)
+  // Start continuous tracking only after the rider explicitly enables GPS.
   useEffect(() => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       setGpsStatus("simulated");
       return;
     }
 
-    if (!isOnline) return;
+    if (!isOnline) {setGpsStatus("idle");return;}
+    if (!gpsEnabled) return;
 
     let watchId: number;
     try {
@@ -133,36 +149,12 @@ export default function RiderDashboard() {
           setGpsCoords({ lat, lng });
           setGpsStatus("active");
 
-          // Broadcast to active task if moved
-          const prev = lastBroadcastRef.current;
-          if (prev && Math.abs(prev.lat - lat) < 0.0001 && Math.abs(prev.lng - lng) < 0.0001) {
-            return;
-          }
-          lastBroadcastRef.current = { lat, lng };
 
-          // Broadcast GPS strictly to orders assigned to THIS rider (by ID only)
-          const activeOrder = ordersRef.current.find(
-            (o) =>
-              !!userRef.current?.id &&
-              o.riderId === userRef.current.id &&
-              (o.status === "picked_up" || o.status === "rider_assigned")
-          );
-
-          if (activeOrder) {
-            fetch("/api/orders", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                orderId: activeOrder.id,
-                riderLat: lat,
-                riderLng: lng,
-              }),
-            }).catch(() => {});
-          }
         },
         (err) => {
           console.log("GPS Notice:", err.message);
-          setGpsStatus(err.code === 1 ? "denied" : "simulated");
+          setGpsStatus(err.code === 1 ? "denied" : "error");
+          setGpsMessage(err.code === 1 ? "Location access was blocked. Allow Location in browser site settings, then retry." : "GPS signal unavailable. Turn on device Location and retry.");
         },
         { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
       );
@@ -175,7 +167,7 @@ export default function RiderDashboard() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [isOnline]);
+  }, [isOnline, gpsEnabled]);
 
   // Demo step mover for testing live synchronization on laptop
   const advanceRiderLocation = async (orderId: string) => {
@@ -272,6 +264,17 @@ export default function RiderDashboard() {
   });
 
   ordersRef.current = liveOrders;
+  useEffect(() => {
+    if(!isOnline || !gpsEnabled || gpsStatus!=="active" || !gpsCoords || syncInFlightRef.current)return;
+    const activeOrder=liveOrders.find(o=>o.riderId===userRef.current?.id && (o.status==="picked_up" || o.status==="rider_assigned"));
+    if(!activeOrder || !shouldSyncRiderLocation(lastBroadcastRef.current,gpsCoords,lastBroadcastOrderRef.current,activeOrder.id))return;
+    const point={...gpsCoords};syncInFlightRef.current=true;
+    fetch("/api/orders",{method:"PATCH",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(15000),body:JSON.stringify({orderId:activeOrder.id,riderLat:point.lat,riderLng:point.lng})})
+      .then(response=>{if(!response.ok)throw Error("Location sync failed");lastBroadcastRef.current=point;lastBroadcastOrderRef.current=activeOrder.id;})
+      .catch(()=>setGpsMessage("GPS is available, but location sync failed. Check your connection; the next update will retry."))
+      .finally(()=>{syncInFlightRef.current=false;});
+  },[liveOrders,gpsCoords,gpsStatus,gpsEnabled,isOnline]);
+
   userRef.current = currentUser;
 
   // Filter 2: My Active Deliveries — matched ONLY by rider ID from the server,
@@ -450,9 +453,11 @@ export default function RiderDashboard() {
                     : "bg-amber-50 text-amber-700 border-amber-200"
                 }`}
               >
-                {gpsStatus === "active" ? "🛰️ GPS: LIVE" : "📍 GPS: AUTO"}
+                {gpsStatus === "active" ? "GPS: LIVE" : gpsStatus === "requesting" ? "GPS: REQUESTING" : gpsStatus === "simulated" ? "GPS: DEMO" : gpsStatus === "denied" ? "GPS: BLOCKED" : "GPS: OFF"}
               </span>
+              <button type="button" disabled={gpsStatus === "requesting"} onClick={startGps} className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[10px] font-bold text-orange-700 disabled:opacity-50">{gpsStatus === "requesting" ? "Finding GPS…" : gpsStatus === "active" ? "Refresh GPS" : gpsStatus === "denied" || gpsStatus === "error" ? "Retry GPS" : "Enable GPS"}</button>
             </div>
+            {gpsMessage && <p role="status" className="mt-2 max-w-md text-xs text-stone-600">{gpsMessage}</p>}
           </div>
 
           <div className="flex items-center gap-1.5">

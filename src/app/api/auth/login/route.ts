@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const cleanUser = typeof username === "string" ? username.trim().toLowerCase() : "";
     const cleanPass = typeof password === "string" ? password : "";
 
-    let authenticatedUser: AuthUser | null = role === "customer" ? null : temporaryLogin(role, cleanUser, cleanPass || "");
+    let authenticatedUser: AuthUser | null = role !== "admin" ? null : temporaryLogin(role, cleanUser, cleanPass || "");
 
     // 1. Restaurant Partner Login
     if (authenticatedUser) {

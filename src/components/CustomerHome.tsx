@@ -481,7 +481,7 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
       setDeliveryCoords({lat, lng});
       setSelectedLocation(`Delivery pin: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       setLocationMessage("Delivery pin saved. Please provide your house number and landmark at checkout.");
-    }, () => setLocationMessage("Could not access location. Check permissions or choose an area."), {enableHighAccuracy: true, timeout: 15000});
+    }, err => setLocationMessage(err.code === 1 ? "Location is blocked. Open browser site settings, allow Location, then try again." : "Could not get a GPS fix. Turn on device Location and retry."), {enableHighAccuracy: true, timeout: 15000});
   };
   const [addressDetails, setAddressDetails] = useState("");
 
@@ -1283,7 +1283,7 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
               </button>
             </div>
 
-            <button onClick={useCurrentLocation} className="mt-3 text-sm font-bold text-orange-600">Use my current location</button>
+            <button onClick={useCurrentLocation} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-bold text-white">Enable GPS / use my current location</button>
             {locationMessage && <p role="status" className="text-xs mt-2">{locationMessage}</p>}
             <div className="py-4 space-y-2">
               {[

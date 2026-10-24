@@ -40,6 +40,7 @@ function load(file, overrides={}) {
   return exports;
 }
 const delivery = load('src/lib/delivery.ts');
+const gps = load('src/lib/riderGps.ts');
 const orders = load('src/app/api/orders/route.ts');
 const pins = load('src/app/api/orders/regenerate-pin/route.ts');
 const reorder = load('src/app/api/account/reorder/route.ts', {'@/lib/authBackend':{authBackend:()=>db}});
@@ -51,6 +52,7 @@ let count=0;
 async function check(label, fn) {await fn(); count++; console.log('PASS '+label);}
 (async()=>{
  await check('city centre allowed',()=>assert.equal(delivery.isServiceable(23.12,83.1985),true));
+ await check('stationary rider syncs the first location for a new assignment',()=>{const p={lat:23.12,lng:83.1985};assert.equal(gps.shouldSyncRiderLocation(p,p,'old-order','new-order'),true);assert.equal(gps.shouldSyncRiderLocation(p,p,'same-order','same-order'),false);assert.equal(gps.shouldSyncRiderLocation(null,p,null,'new-order'),true);});
  await check('outside 12 km rejected',()=>assert.equal(delivery.isServiceable(24,83.1985),false));
  await check('invalid/missing coordinates rejected',()=>{for(const pair of [[NaN,83],['23',83],[91,83],[23,undefined]])assert.equal(delivery.isServiceable(...pair),false);});
  await check('unauthenticated private order list denied',async()=>assert.equal((await orders.GET(request({}))).status,401));

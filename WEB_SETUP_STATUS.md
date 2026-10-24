@@ -68,3 +68,9 @@ The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Ve
 - Removed artificial login/signup redirect pauses and kept the submit button pending during navigation. Added route loading feedback and account mutation status text.
 - Removed the duplicate external unpkg Leaflet stylesheet from the root; the map already imports its installed local CSS.
 - The homepage header now uses signed display-only session hints so it does not block on a remote Auth lookup. It never authorizes reads or writes. The customer account request refreshes display hints; all private APIs still validate the fresh Auth record and password-reset revocation. Account edits renew the signed display cookie with name/photo only, without adding addresses to the cookie.
+
+## GPS demo testing
+- Approved native Supabase demo rider and partner accounts are available; the partner is bound to The Royal Kitchen. Credentials are shared privately in chat, not committed here. Local staff demo sessions now defer to native Supabase identities (local-only admin remains separate).
+- Rider GPS starts with Enable GPS, displays blocked/error states and offers retry. No permission denial is labeled AUTO/simulated. Customer location is requested from Deliver to > Enable GPS / use my current location, or the saved-address form.
+- A rider's captured GPS is synced only to their assigned active delivery. The first assignment syncs even if the rider is stationary; failed requests are retried by subsequent order/location updates and concurrent syncs are avoided.
+- Real phone geolocation permission and position acquisition still require testing in the phone's HTTPS browser. Use separate browser profiles/devices for customer, rider and partner: one browser cookie session otherwise replaces the previous role.
