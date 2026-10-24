@@ -7,7 +7,7 @@
 - Login elevates only from server-managed app_metadata; editable user_metadata is not trusted for approval/role.
 - Demo staff login is disabled unless ENABLE_DEMO_LOGIN=true in non-production. Unverified quick-phone login removed.
 - Session signing requires AUTH_SECRET (at least 32 characters); server checks expiry and constant-time signature comparison.
-- OTP uses crypto randomness, browser-bound HttpOnly challenge, resend cooldown and five-attempt cap.
+- Signup/recovery codes are now issued and verified by Supabase Auth and delivered through Brevo. Registration requires a server-validated HttpOnly signup proof; no process-local OTP memory is used by the live routes. Recovery is single-use, updates the password server-side, and invalidates older website sessions.
 - Failed account creation no longer fabricates customer identities.
 - Checkout verifies live menu IDs/prices, one restaurant, stock, open state, totals, address and 12 km straight-line service radius.
 - Checkout currently supports COD only; the unverified UPI-completed shortcut is disabled.
@@ -29,7 +29,7 @@
 
 ## Known remaining engineering work
 - Checkout currently uses compensating deletion if line-item insertion fails. Move order + item writes into a transactional DB function before a public launch. No new DB function/migration was deployed in this change.
-- Add durable idempotency keys and delivery/PIN attempt counters for multi-instance production. OTP proof/rate limits still use a process-local store; use a durable challenge store for serverless deployments.
+- Add durable idempotency keys and delivery/PIN attempt counters for multi-instance production. OTP state is now managed by Supabase Auth. Add durable per-IP/email abuse protection for the custom Brevo dispatch endpoint; its browser cooldown alone is not sufficient abuse prevention.
 - Missing schema columns, constraints or RLS in the actual live DB have not been certified by these local tests. API guards do not fix a publicly exposed Data API. Inspect exact live project before changing its RLS.
 - Add-ons still need durable option IDs/price snapshots end-to-end. The checkout charges only authoritative base menu prices; no unsupported browser-supplied extras are accepted.
 - COD cash handovers/payout accounting need durable ledger transactions and reconciliation.
@@ -42,4 +42,6 @@
 Run: node tests/security-regression.cjs
 Run: npx tsc --noEmit --incremental false
 The regression suite mocks database/providers; no live OTP, order or private data was created by those checks.
-Production build attempts and their outcomes should be reported separately; no deployment was performed.
+Auth integration: with the local server running, set RUN_AUTH_INTEGRATION=1 and run node tests/auth-integration.cjs. This explicitly creates and removes one disposable Supabase account, sends no emails, and tests proof binding, signup/login, role rejection, password recovery, replay rejection and old-session invalidation.
+
+The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Vercel. Confirm the latest Vercel deployment status separately. Required production values: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, AUTH_SECRET (32+ characters), BREVO_API_KEY and BREVO_SENDER_EMAIL. Local temporary accounts are deliberately disabled in production.

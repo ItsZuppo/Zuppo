@@ -43,7 +43,6 @@ const delivery = load('src/lib/delivery.ts');
 const orders = load('src/app/api/orders/route.ts');
 const pins = load('src/app/api/orders/regenerate-pin/route.ts');
 const admin = load('src/app/api/admin/verifications/route.ts');
-const otp = load('src/lib/otpStore.ts');
 const request = (body, url='http://localhost/api/orders') => ({url,json:async()=>body});
 const uid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const order={id:uid,customer_id:'owner',restaurant_id:'kitchen',restaurant_name:'Kitchen',delivery_pin:'1234',status:'picked_up',rider_id:'driver',order_items:[]};
@@ -73,6 +72,5 @@ async function check(label, fn) {await fn(); count++; console.log('PASS '+label)
  await check('failed delivery update is not acknowledged',async()=>assert.equal((await orders.PATCH(request({orderId:uid,status:'delivered',submittedPin:'1234'}))).status,503));failure=null;
  rows=[{...order,status:'ready_for_pickup',rider_id:null}]; calls=[];
  await check('rider claim uses conditional DB ownership + state',async()=>{await orders.PATCH(request({orderId:uid,status:'picked_up'})); const c=calls.find(c=>c.action==='update');assert.ok(c.filters.some(f=>f[0]==='is'&&f[1]==='rider_id'&&f[2]===null)); assert.ok(c.filters.some(f=>f[1]==='status'&&f[2]==='ready_for_pickup'));});
- await check('OTP proof is browser-bound and attempt limited',()=>{otp.storeOtp('test@example.com','123456','browser-a');assert.equal(otp.verifyOtpCode('test@example.com','123456','browser-b').valid,false); for(let i=0;i<5;i++)otp.verifyOtpCode('test@example.com','000000','browser-a');assert.equal(otp.verifyOtpCode('test@example.com','123456','browser-a').valid,false);otp.storeOtp('test@example.com','123456','browser-a');assert.equal(otp.verifyOtpCode('test@example.com','123456','browser-a').valid,true);assert.equal(otp.isEmailOtpVerified('test@example.com','browser-b'),false);});
  console.log(`${count} security/delivery regression checks passed. Database/provider calls mocked; no live messages or orders created.`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

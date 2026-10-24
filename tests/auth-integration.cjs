@@ -23,4 +23,3 @@ try{
  assert.equal((await post('login',{role:'customer',username:email,password:newPassword})).body.success,true);
  console.log('PASS: HTTP registration requires proof, rejects wrong email and role changes; login preserves password spaces; recovery is single use; old password rejected and new password works.');
 }finally{if(id){const d=await c.auth.admin.deleteUser(id);if(d.error)throw d.error;console.log('Temporary test account removed.');}}})().catch(e=>{console.error(e);process.exitCode=1;});
-
