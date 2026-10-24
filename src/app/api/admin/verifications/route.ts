@@ -7,6 +7,21 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://wkxqknaznpz
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+
+function canNotify(email: string | undefined): email is string {
+ return typeof email === "string" && !/\.(invalid|test)$/i.test(email);
+}
+
+async function listAllUsers() {
+ const users=[];
+ for(let page=1;;page++){
+  const {data,error}=await supabase.auth.admin.listUsers({page,perPage:1000});
+  if(error)throw error;
+  users.push(...data.users);
+  if(data.users.length<1000)return users;
+ }
+}
+
 export async function GET() {
   try {
     const session = await getSessionUser();
@@ -21,13 +36,13 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     // 2. Fetch riders & users from Supabase Auth admin
-    const { data: usersData } = await supabase.auth.admin.listUsers();
-    const allUsers = usersData?.users || [];
+    if(kErr)throw kErr;
+    const allUsers = await listAllUsers();
 
     const pendingKitchens = (kitchens || []).map((k) => {
       // Find matching owner user metadata for KYC docs
       const ownerUser = allUsers.find(
-        (u) => u.user_metadata?.restaurantId === k.id || u.id === k.owner_id
+        (u) => u.app_metadata?.restaurantId === k.id || u.id === k.owner_id
       );
       const kyc = ownerUser?.user_metadata?.kyc || {};
       return {
@@ -52,7 +67,7 @@ export async function GET() {
     });
 
     const pendingRiders = allUsers
-      .filter((u) => u.user_metadata?.role === "rider")
+      .filter((u) => u.app_metadata?.role === "rider")
       .map((u) => {
         const meta = u.user_metadata || {};
         const kyc = meta.kyc || {};
@@ -62,7 +77,7 @@ export async function GET() {
           email: u.email,
           phone: meta.phone || "+91 98261 00000",
           vehicle: meta.vehicle || "Hero Splendor (CG 15)",
-          status: meta.status || "pending_verification",
+          status: u.app_metadata?.status || "pending_verification",
           createdAt: u.created_at,
           dlNumber: kyc.dlNumber || "DL-AMB-1001",
           aadhaarNumber: kyc.aadhaarNumber || "AADHAAR-ON-FILE",
@@ -96,6 +111,11 @@ export async function POST(req: Request) {
     }
 
     if (type === "partner") {
+      const {data:kitchen,error:readError}=await supabase.from("restaurants").select("id,is_blocked,is_open").eq("id",id).maybeSingle();
+      if(readError)throw readError;
+      if(!kitchen)return NextResponse.json({success:false,error:"Restaurant not found."},{status:404});
+      const ownerUser=(await listAllUsers()).find(u=>u.app_metadata?.role==="partner" && u.app_metadata?.restaurantId===id);
+      if(!ownerUser)return NextResponse.json({success:false,error:"No partner account is linked to this restaurant."},{status:404});
       if (action === "approve") {
         // Unblock restaurant
         const { error } = await supabase
@@ -105,31 +125,32 @@ export async function POST(req: Request) {
 
         if (error) throw error;
 
-        // Find user and notify via Brevo
-        const { data: usersData } = await supabase.auth.admin.listUsers();
-        const ownerUser = usersData?.users?.find(
-          (u) => u.user_metadata?.restaurantId === id
-        );
-
+        // Activate the linked, server-managed partner identity.
         if (ownerUser) {
-          await supabase.auth.admin.updateUserById(ownerUser.id, {
+          const {error:activationError}=await supabase.auth.admin.updateUserById(ownerUser.id, {
             app_metadata: { ...ownerUser.app_metadata, role: "partner", restaurantId: id, status: "active" },
             user_metadata: { ...ownerUser.user_metadata, status: "active" },
           });
+          if(activationError){
+            const rollback=await supabase.from("restaurants").update({is_blocked:kitchen.is_blocked,is_open:kitchen.is_open}).eq("id",id);
+            if(rollback.error)console.error("Partner approval rollback failed",rollback.error.code);
+            throw activationError;
+          }
+
 
           // Send approval confirmation email via Brevo
-          if (ownerUser.email) {
+          if (canNotify(ownerUser.email)) {
             await sendEmailViaBrevo({
               toEmail: ownerUser.email,
               toName: ownerUser.user_metadata?.full_name || "Partner",
-              subject: "🎉 Kitchen Approved! Your Restaurant is Now LIVE on AmbiBites",
+              subject: "🎉 Kitchen Approved! Your Restaurant is Now LIVE on Zuppo",
               htmlContent: `
                 <div style="font-family: sans-serif; padding: 24px; color: #1e293b;">
                   <h2 style="color: #ea580c;">Congratulations! Your Kitchen is Approved!</h2>
-                  <p>Our Ambikapur Admin team has verified your KYC documents. Your restaurant is now officially <strong>LIVE</strong> on AmbiBites.</p>
-                  <p>You can now log in at <a href="https://ambibite.vercel.app/partner">ambibite.vercel.app/partner</a> to receive orders, manage your live menu, and add dishes.</p>
+                  <p>Our Ambikapur Admin team has verified your KYC documents. Your restaurant is now officially <strong>LIVE</strong> on Zuppo.</p>
+                  <p>You can now log in at <a href="https://zuppo-seven.vercel.app/partner/login">zuppo-seven.vercel.app/partner/login</a> to receive orders, manage your live menu, and add dishes.</p>
                   <br/>
-                  <p>Cheers,<br/><strong>AmbiBites Ambikapur Operations Team</strong></p>
+                  <p>Cheers,<br/><strong>Zuppo Ambikapur Operations Team</strong></p>
                 </div>
               `,
             });
@@ -142,10 +163,16 @@ export async function POST(req: Request) {
         });
       } else {
         // Reject
-        await supabase
+        const {error:rejectKitchenError}=await supabase
           .from("restaurants")
           .update({ is_blocked: true, is_open: false })
           .eq("id", id);
+        if(rejectKitchenError)throw rejectKitchenError;
+        const {error:rejectOwnerError}=await supabase.auth.admin.updateUserById(ownerUser.id,{
+          app_metadata:{...ownerUser.app_metadata,status:"rejected"},
+          user_metadata:{...ownerUser.user_metadata,status:"rejected"},
+        });
+        if(rejectOwnerError)throw rejectOwnerError;
 
         return NextResponse.json({
           success: true,
@@ -156,25 +183,28 @@ export async function POST(req: Request) {
 
     if (type === "rider") {
       if (action === "approve") {
-        const { data: user } = await supabase.auth.admin.getUserById(id);
-        if (user?.user) {
-          await supabase.auth.admin.updateUserById(id, {
+        const { data: user,error:readError } = await supabase.auth.admin.getUserById(id);
+        if(readError && readError.status!==404)throw readError;
+        if(!user?.user || user.user.app_metadata?.role!=="rider")return NextResponse.json({success:false,error:"Rider not found."},{status:404});
+        if (user.user) {
+          const {error:activationError}=await supabase.auth.admin.updateUserById(id, {
             app_metadata: { ...user.user.app_metadata, role: "rider", status: "active" },
             user_metadata: { ...user.user.user_metadata, status: "active" },
           });
+          if(activationError)throw activationError;
 
-          if (user.user.email) {
+          if (canNotify(user.user.email)) {
             await sendEmailViaBrevo({
               toEmail: user.user.email,
               toName: user.user.user_metadata?.full_name || "Rider",
-              subject: "🛵 Rider Fleet Approved! Welcome to AmbiBites Ambikapur",
+              subject: "🛵 Rider Fleet Approved! Welcome to Zuppo Ambikapur",
               htmlContent: `
                 <div style="font-family: sans-serif; padding: 24px; color: #1e293b;">
-                  <h2 style="color: #ea580c;">Welcome to the AmbiBites Delivery Fleet!</h2>
+                  <h2 style="color: #ea580c;">Welcome to the Zuppo Delivery Fleet!</h2>
                   <p>Your Driving License and Aadhaar KYC have been verified by Ambikapur Admin.</p>
-                  <p>You can now log in at <a href="https://ambibite.vercel.app/rider">ambibite.vercel.app/rider</a>, toggle <strong>Online</strong>, and start earning ₹40/trip!</p>
+                  <p>You can now log in at <a href="https://zuppo-seven.vercel.app/rider/login">zuppo-seven.vercel.app/rider/login</a>, toggle <strong>Online</strong>, and start earning ₹40/trip!</p>
                   <br/>
-                  <p>Safe riding,<br/><strong>AmbiBites Fleet Operations</strong></p>
+                  <p>Safe riding,<br/><strong>Zuppo Fleet Operations</strong></p>
                 </div>
               `,
             });
@@ -187,7 +217,8 @@ export async function POST(req: Request) {
         });
       } else {
         const { data: rejected, error: readError } = await supabase.auth.admin.getUserById(id);
-        if (readError || !rejected.user) throw new Error("Rider not found");
+        if(readError && readError.status!==404)throw readError;
+        if(!rejected.user || rejected.user.app_metadata?.role!=="rider")return NextResponse.json({success:false,error:"Rider not found."},{status:404});
         const { error: rejectError } = await supabase.auth.admin.updateUserById(id, {
           app_metadata: { ...rejected.user.app_metadata, role: "rider", status: "rejected" },
           user_metadata: { ...rejected.user.user_metadata, status: "rejected" },

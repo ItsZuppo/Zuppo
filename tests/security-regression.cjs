@@ -61,6 +61,31 @@ async function check(label, fn) {await fn(); count++; console.log('PASS '+label)
  await check('reorder lookup scopes by current customer',async()=>{user={id:'current-customer',role:'customer'};rows=[];calls=[];assert.equal((await reorder.POST(request({orderId:uid}))).status,404);assert.ok(calls[0].filters.some(f=>f[1]==='customer_id'&&f[2]==='current-customer'));user=null;});
  await check('public PIN regeneration denied',async()=>assert.equal((await pins.POST(request({orderId:uid}))).status,401));
  await check('admin KYC GET/POST deny anonymous',async()=>{assert.equal((await admin.GET()).status,401);assert.equal((await admin.POST(request({}))).status,401);});
+ await check('failed partner provisioning removes the incomplete kitchen',async()=>{
+  let deleted=false;
+  const fake={auth:{getUser:async()=>({data:{user:{id:uid,email:'qa@example.invalid',email_confirmed_at:'2026-01-01',app_metadata:{}}},error:null}),admin:{updateUserById:async()=>({data:{user:null},error:{status:500}})}},from:()=>({insert:()=>({select:()=>({single:async()=>({data:{id:'test-kitchen',name:'Test Kitchen'},error:null})})}),delete:()=>({eq:async()=>{deleted=true;return {error:null};}})})};
+  const register=load('src/app/api/auth/register/route.ts',{
+   'next/headers':{cookies:async()=>({get:()=>({value:'test-proof'})})},
+   '@/lib/auth':{},
+   '@/lib/authBackend':{authBackend:()=>fake,authError:()=> 'Retry registration'},
+  });
+  const result=await register.POST(request({role:'partner',email:'qa@example.invalid',password:'test-password',name:'Test Owner'}));assert.equal(result.status,503);assert.equal(deleted,true);
+ });
+ await check('failed rider activation cannot report approval success',async()=>{
+  const broken=load('src/app/api/admin/verifications/route.ts',{
+   '@/lib/auth':{getSessionUser:async()=>({id:'admin',role:'admin'})},
+   '@supabase/supabase-js':{createClient:()=>({auth:{admin:{getUserById:async()=>({data:{user:{id:uid,app_metadata:{role:'rider'},user_metadata:{}}},error:null}),updateUserById:async()=>({error:{message:'Activation write failed'}})}}})},
+  });
+  const result=await broken.POST(request({action:'approve',type:'rider',id:uid}));assert.equal(result.status,500);assert.equal(result.body.success,false);
+ });
+ await check('nonexistent rider cannot report approval success',async()=>{
+  const missing=load('src/app/api/admin/verifications/route.ts',{
+   '@/lib/auth':{getSessionUser:async()=>({id:'admin',role:'admin'})},
+   '@supabase/supabase-js':{createClient:()=>({auth:{admin:{getUserById:async()=>({data:{user:null},error:{status:404}})}}})},
+  });
+  assert.equal((await missing.POST(request({action:'approve',type:'rider',id:uid}))).status,404);
+ });
+
  user={id:'intruder',role:'customer'};rows=[order];
  await check('known UUID does not reveal another customer PIN',async()=>assert.equal((await orders.GET(request({},'http://localhost/api/orders?id='+uid))).body.orders.length,0));
  await check('another customer cannot regenerate PIN',async()=>assert.equal((await pins.POST(request({orderId:uid}))).status,404));

@@ -179,6 +179,7 @@ export async function POST(req: Request) {
         app_metadata: { role: "partner", restaurantId: restData.id, status: "pending_verification" },
         user_metadata: {
           role: "partner",
+          full_name: name,
           restaurantId: restData.id,
           restaurantName: restData.name,
           phone,
@@ -187,7 +188,11 @@ export async function POST(req: Request) {
         },
       });
 
-      if (authErr || !authUser.user) return NextResponse.json({ success: false, error: "Account could not be created. Please contact support before retrying." }, { status: 400 });
+      if (authErr || !authUser.user) {
+        const {error:cleanupError}=await supabase.from("restaurants").delete().eq("id",restData.id);
+        if(cleanupError)console.error("Incomplete partner kitchen cleanup failed",cleanupError.code);
+        return NextResponse.json({ success: false, error: authError(authErr || {}, "Partner account could not be completed. Please try again.") }, { status: 503 });
+      }
       (await cookies()).delete("zuppo_signup_proof");
       return NextResponse.json({
         success: true,
@@ -231,7 +236,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (authErr || !authUser.user) return NextResponse.json({ success: false, error: "Account could not be created. Please contact support before retrying." }, { status: 400 });
+      if (authErr || !authUser.user) return NextResponse.json({ success: false, error: authError(authErr || {}, "Rider account could not be completed. Please try again.") }, { status: 503 });
       (await cookies()).delete("zuppo_signup_proof");
       return NextResponse.json({
         success: true,

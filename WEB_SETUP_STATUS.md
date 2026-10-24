@@ -74,3 +74,9 @@ The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Ve
 - Rider GPS starts with Enable GPS, displays blocked/error states and offers retry. No permission denial is labeled AUTO/simulated. Customer location is requested from Deliver to > Enable GPS / use my current location, or the saved-address form.
 - A rider's captured GPS is synced only to their assigned active delivery. The first assignment syncs even if the rider is stationary; failed requests are retried by subsequent order/location updates and concurrent syncs are avoided.
 - Real phone geolocation permission and position acquisition still require testing in the phone's HTTPS browser. Use separate browser profiles/devices for customer, rider and partner: one browser cookie session otherwise replaces the previous role.
+
+## Staff signup/approval verification
+- Integration-tested partner and rider email-code verification, pending signup, blocked login before approval, admin approval, approved login and rejection blocking login, with disposable Supabase accounts/kitchens cleaned up afterward.
+- Approval now rejects missing/unlinked identities, checks failed activation writes, and paginates Auth users. Partner provisioning failure removes the incomplete kitchen before reporting a retryable error.
+- Regression checks cover failed activation, nonexistent rider approval and incomplete-kitchen cleanup. Reserved .invalid/.test test addresses do not receive notification emails.
+- Opt-in test: RUN_STAFF_INTEGRATION=1, STAFF_ADMIN_EMAIL and STAFF_ADMIN_PASSWORD, then node tests/staff-signup-integration.cjs. STAFF_TEST_BASE_URL can target the deployed website. Tests do not verify real inbox delivery or upload real KYC documents; private KYC upload storage remains pending.
