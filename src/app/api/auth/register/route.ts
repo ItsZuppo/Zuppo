@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@supabase/supabase-js";
-import {
-  isEmailOtpVerified,
-  consumeOtpVerification,
-} from "@/lib/otpStore";
+import { authBackend, authError } from "@/lib/authBackend";
 import {
   AuthUser,
   signSession,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://wkxqknaznpzvrylsnorl.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export async function POST(req: Request) {
   try {
+    const supabase = authBackend();
     const body = await req.json();
     const {
       role = "customer",
@@ -57,25 +50,19 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify OTP was completed
-    const otpOk = isEmailOtpVerified(email, (await cookies()).get("zuppo_otp_challenge")?.value || "");
-    if (!otpOk) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Email has not been verified with OTP yet. Please verify OTP first.",
-        },
-        { status: 400 }
-      );
-    }
+    if (!["customer", "partner", "rider"].includes(role)) return NextResponse.json({ success: false, error: "Invalid registration role." }, { status: 400 });
+    const proof = (await cookies()).get("zuppo_signup_proof")?.value;
+    const { data: verified, error: proofError } = await supabase.auth.getUser(proof || "invalid");
+    if (proofError || !verified.user || verified.user.email?.toLowerCase() !== email || !verified.user.email_confirmed_at) return NextResponse.json({ success: false, error: "Please verify your email code again before registering." }, { status: 400 });
+    if (verified.user.app_metadata?.role) return NextResponse.json({ success: false, error: "This account is already registered. Please sign in or reset your password." }, { status: 409 });
 
     // 1. CUSTOMER REGISTRATION
     if (role === "customer") {
       const provisionedRole = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase() === email ? "admin" as const : "customer" as const;
-      consumeOtpVerification(email);
 
-      // Create in Supabase Auth via Admin API
-      const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+
+      // Complete the account created by the verified signup challenge.
+      const { data: authUser, error: authErr } = await supabase.auth.admin.updateUserById(verified.user.id, {
         email,
         password,
         email_confirm: true,
@@ -87,7 +74,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (authErr || !authUser.user) return NextResponse.json({ success: false, error: "Account could not be created. Check whether this email is already registered." }, { status: 400 });
+      if (authErr || !authUser.user) return NextResponse.json({ success: false, error: authError(authErr || {}, "Account could not be completed. Please try again.") }, { status: 400 });
       const customerId = authUser.user.id;
 
       // Insert into public.profiles
@@ -120,6 +107,7 @@ export async function POST(req: Request) {
         path: "/",
       });
 
+      (await cookies()).delete("zuppo_signup_proof");
       return NextResponse.json({
         success: true,
         message: "Customer account created successfully!",
@@ -130,7 +118,7 @@ export async function POST(req: Request) {
 
     // 2. RESTAURANT PARTNER REGISTRATION (PENDING KYC APPROVAL)
     if (role === "partner") {
-      consumeOtpVerification(email);
+
 
       const resolvedKitchenName = kitchenName?.trim() || `${name}'s Kitchen`;
       const slug =
@@ -184,7 +172,7 @@ export async function POST(req: Request) {
       }
 
       // Store partner credentials and KYC in Supabase auth user
-      const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+      const { data: authUser, error: authErr } = await supabase.auth.admin.updateUserById(verified.user.id, {
         email,
         password,
         email_confirm: true,
@@ -200,6 +188,7 @@ export async function POST(req: Request) {
       });
 
       if (authErr || !authUser.user) return NextResponse.json({ success: false, error: "Account could not be created. Please contact support before retrying." }, { status: 400 });
+      (await cookies()).delete("zuppo_signup_proof");
       return NextResponse.json({
         success: true,
         status: "pending_verification",
@@ -211,7 +200,7 @@ export async function POST(req: Request) {
 
     // 3. RIDER REGISTRATION (PENDING FLEET APPROVAL)
     if (role === "rider") {
-      consumeOtpVerification(email);
+
 
       const riderKyc = {
         name,
@@ -227,7 +216,7 @@ export async function POST(req: Request) {
       };
 
       // Create Rider profile in Supabase Auth
-      const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+      const { data: authUser, error: authErr } = await supabase.auth.admin.updateUserById(verified.user.id, {
         email,
         password,
         email_confirm: true,
@@ -243,6 +232,7 @@ export async function POST(req: Request) {
       });
 
       if (authErr || !authUser.user) return NextResponse.json({ success: false, error: "Account could not be created. Please contact support before retrying." }, { status: 400 });
+      (await cookies()).delete("zuppo_signup_proof");
       return NextResponse.json({
         success: true,
         status: "pending_verification",

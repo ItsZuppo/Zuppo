@@ -63,7 +63,8 @@ export async function sendOtpEmail(
   otp: string,
   roleTitle: string = "Account Verification"
 ): Promise<{ success: boolean; error?: string }> {
-  const subject = `Your AmbiBites Code: ${otp} (Valid for 10 mins)`;
+  const safeName = toName.replace(/[<>&"']/g, "");
+  const subject = `Your Zuppo Code: ${otp} `;
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -90,19 +91,19 @@ export async function sendOtpEmail(
       <body>
         <div class="card">
           <div class="header">
-            <div class="logo">A</div>
-            <h1 class="brand-title">AmbiBites</h1>
+            <div class="logo">Z</div>
+            <h1 class="brand-title">Zuppo</h1>
             <div class="brand-sub">Ambikapur Food Delivery</div>
           </div>
           <div class="content">
-            <h2 class="greeting">Hello ${toName || "Foodie"}!</h2>
+            <h2 class="greeting">Hello ${safeName || "Foodie"}!</h2>
             <p class="desc">
-              Here is your one-time verification code for <strong>${roleTitle}</strong> on AmbiBites Ambikapur.
+              Here is your one-time verification code for <strong>${roleTitle}</strong> on Zuppo Ambikapur.
             </p>
             
             <div class="otp-container">
               <div class="otp-code">${otp}</div>
-              <div class="otp-expiry">Expires in 10 minutes</div>
+              <div class="otp-expiry">Use this code promptly</div>
             </div>
 
             <p class="desc" style="font-size: 13px;">
@@ -114,7 +115,7 @@ export async function sendOtpEmail(
             </div>
           </div>
           <div class="footer">
-            &copy; 2026 AmbiBites Technologies • Ambikapur, Surguja, CG • All rights reserved.
+            &copy; 2026 Zuppo Technologies • Ambikapur, Surguja, CG • All rights reserved.
           </div>
         </div>
       </body>

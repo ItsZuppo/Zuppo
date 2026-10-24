@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import { authBackend } from "./authBackend";
 
 export interface AuthUser {
   id: string;
@@ -11,6 +12,7 @@ export interface AuthUser {
   restaurantName?: string;
   vehicle?: string;
   developmentOnly?: boolean;
+  issuedAt?: number;
 }
 
 function authSecret(): string {
@@ -93,7 +95,7 @@ export const ADMIN_CREDENTIALS = {
 
 // Cryptographic HMAC token signing & verification
 export function signSession(user: AuthUser): string {
-  const payload = Buffer.from(JSON.stringify({ ...user, exp: Date.now() + 30 * 24 * 60 * 60 * 1000 })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ ...user, issuedAt: Date.now(), exp: Date.now() + 30 * 24 * 60 * 60 * 1000 })).toString("base64url");
   const signature = crypto.createHmac("sha256", authSecret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
@@ -120,7 +122,13 @@ export async function getSessionUser(): Promise<AuthUser | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    return verifySession(token);
+    const user = verifySession(token);
+    if (!user || user.developmentOnly) return user;
+    const { data, error } = await authBackend().auth.admin.getUserById(user.id);
+    if (error || !data.user) return null;
+    const changedAt = data.user.app_metadata?.password_changed_at;
+    if (typeof changedAt === "number" && (!user.issuedAt || user.issuedAt < changedAt)) return null;
+    return user;
   } catch {
     return null;
   }

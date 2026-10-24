@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@supabase/supabase-js";
+import { authBackend, authError } from "@/lib/authBackend";
 import {
   AuthUser,
   temporaryLogin,
@@ -11,16 +11,13 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://wkxqknaznpzvrylsnorl.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-
 export async function POST(req: Request) {
   try {
+    const supabase = authBackend();
     const body = await req.json();
     const { role, username, password, phone, customerName } = body;
     const cleanUser = typeof username === "string" ? username.trim().toLowerCase() : "";
-    const cleanPass = password?.trim();
+    const cleanPass = typeof password === "string" ? password : "";
 
     let authenticatedUser: AuthUser | null = temporaryLogin(role, cleanUser, cleanPass || "");
 
@@ -194,11 +191,12 @@ export async function POST(req: Request) {
 
         if (supaErr || !supaAuth.user) {
           return NextResponse.json(
-            { success: false, error: "Invalid customer email or password. You can also sign up with OTP." },
+            { success: false, error: authError(supaErr || {}, "Invalid email or password. Use Forgot password to reset it.") },
             { status: 401 }
           );
         }
 
+        if (supaAuth.user.app_metadata?.role !== "customer") return NextResponse.json({ success: false, error: "Use the correct portal for your account, or finish registration." }, { status: 403 });
         const meta = supaAuth.user.user_metadata || {};
         authenticatedUser = {
           id: supaAuth.user.id,

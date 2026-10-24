@@ -1,62 +1,39 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { randomInt, randomUUID } from "crypto";
-import { storeOtp, maySendOtp } from "@/lib/otpStore";
+import { randomBytes } from "crypto";
+import { authBackend, authError } from "@/lib/authBackend";
 import { sendOtpEmail } from "@/lib/email";
-
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const email = body.email?.trim().toLowerCase();
-    const name = body.name?.trim() || "Foodie";
-    const role = body.role || "customer";
-
-    if (!email || !email.includes("@")) {
-      return NextResponse.json(
-        { success: false, error: "Please provide a valid email address." },
-        { status: 400 }
-      );
+ try {
+  const body = await req.json();
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({success:false,error:"Enter a valid email address."},{status:400});
+  const cookieStore = await cookies();
+  if (cookieStore.get("zuppo_otp_cooldown")) return NextResponse.json({success:false,error:"Please wait 60 seconds before requesting another code."},{status:429});
+  const recovery = body.purpose === "recovery";
+  const client = authBackend();
+  let {data,error} = await client.auth.admin.generateLink(recovery ? {type:"recovery",email} : {type:"signup",email,password:randomBytes(32).toString("base64url")});
+  let verificationType = "signup";
+  // Resume an email-verified signup whose final registration was interrupted.
+  if (!recovery && error && ["email_exists", "user_already_exists"].includes(error.code || "")) {
+    const resumed = await client.auth.admin.generateLink({type:"recovery",email});
+    if (!resumed.error && resumed.data.user && !resumed.data.user.app_metadata?.role) {
+      data = resumed.data; error = null; verificationType = "recovery";
     }
-
-    // Generate random 6-digit OTP
-    if (!maySendOtp(email)) return NextResponse.json({ success: false, error: "Please wait 60 seconds before requesting another code." }, { status: 429 });
-    const otp = randomInt(100000, 1000000).toString();
-    const challenge = randomUUID();
-
-    // Store in OTP cache
-    storeOtp(email, otp, challenge);
-
-    const roleTitleMap: Record<string, string> = {
-      customer: "Customer Account Verification",
-      partner: "Restaurant Partner Registration",
-      rider: "Rider Fleet Onboarding",
-      admin: "Admin Access Verification",
-    };
-
-    const roleTitle = roleTitleMap[role] || "Account Verification";
-
-    // Send email via Brevo
-    const emailRes = await sendOtpEmail(email, name, otp, roleTitle);
-
-    if (!emailRes.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: emailRes.error || "Failed to dispatch email via Brevo. Please check API key.",
-        },
-        { status: 500 }
-      );
-    }
-
-    (await cookies()).set("zuppo_otp_challenge", challenge, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", maxAge: 600, path: "/" });
-    return NextResponse.json({
-      success: true,
-      message: `A 6-digit verification code has been sent to ${email}`,
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to process OTP request" },
-      { status: 500 }
-    );
   }
+  const options = {httpOnly:true,sameSite:"strict" as const,secure:process.env.NODE_ENV==="production",path:"/"};
+  cookieStore.set("zuppo_otp_cooldown","1",{...options,maxAge:60});
+  if (error || !data.properties?.email_otp) {
+   if (recovery && error?.code==="user_not_found") return NextResponse.json({success:true,message:"If this email has an account, a reset code will arrive shortly."});
+   console.error("OTP generation failed",error?.code,error?.status);
+   return NextResponse.json({success:false,error:authError(error || {},"Could not start email verification. Try signing in or use Forgot password.")},{status:400});
+  }
+  const sent = await sendOtpEmail(email,"Foodie",data.properties.email_otp,recovery ? "Password Reset" : "Account Verification");
+  if (!sent.success) return NextResponse.json({success:false,error:"Verification email could not be sent. Please try again shortly."},{status:503});
+  cookieStore.delete("zuppo_signup_proof");
+  if (!recovery) cookieStore.set("zuppo_signup_type",verificationType,{...options,maxAge:600});
+  return NextResponse.json({success:true,message:recovery ? "If this email has an account, a reset code will arrive shortly." : "Verification code sent. Check your inbox and spam folder."});
+ } catch(error) {
+  return NextResponse.json({success:false,error:error instanceof Error ? error.message : "Email verification unavailable."},{status:503});
+ }
 }

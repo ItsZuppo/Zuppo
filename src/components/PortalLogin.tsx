@@ -1,6 +1,7 @@
 "use client";
 
 import BrandLogo from "@/components/BrandLogo";
+import PasswordReset from "@/components/PasswordReset";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,6 +41,7 @@ type AuthMode = "login" | "register";
 export default function PortalLogin({ role = "customer" }: { role?: RoleType }) {
   const router = useRouter();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [resetPassword, setResetPassword] = useState(false);
   const activeRole = role;
 
   // Multi-step Registration Wizard: Step 1 (Basic Details & OTP) -> Step 2 (KYC & Documents)
@@ -120,6 +122,9 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
     setSuccessMsg(null);
     setSubmittedPending(false);
     setRegStep(1);
+    setIsEmailVerified(false);
+    setOtpSent(false);
+    setOtpCode("");
   }, [activeRole, authMode]);
 
   // 1. Send OTP via Brevo
@@ -148,7 +153,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
       if (data.success) {
         setOtpSent(true);
         setResendCountdown(60);
-        setSuccessMsg(`Verification code sent to ${email} via Brevo!`);
+        setSuccessMsg(`Verification code sent to ${email}. Check your inbox and spam folder.`);
       } else {
         setErrorMsg(data.error || "Failed to send OTP email.");
       }
@@ -443,7 +448,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
           {/* Mode Switcher: Sign In vs Register Tabs */}
           <div className="flex bg-[#EFE9DF] p-1.5 rounded-2xl border border-[#E5DDD2] shadow-inner">
             <button
-              onClick={() => setAuthMode("login")}
+              onClick={() => { setResetPassword(false); setAuthMode("login"); }}
               className={`flex-1 py-2.5 rounded-xl font-black text-xs transition-all duration-200 cursor-pointer ${
                 authMode === "login"
                   ? "bg-white text-stone-900 shadow-md shadow-stone-300/40"
@@ -453,7 +458,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
               Sign In (Login)
             </button>
             {activeRole !== "admin" && <button
-              onClick={() => setAuthMode("register")}
+              onClick={() => { setResetPassword(false); setAuthMode("register"); }}
               className={`flex-1 py-2.5 rounded-xl font-black text-xs transition-all duration-200 cursor-pointer ${
                 authMode === "register"
                   ? "bg-white text-stone-900 shadow-md shadow-stone-300/40"
@@ -538,6 +543,8 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                   Return to Sign In Screen
                 </button>
               </div>
+            ) : resetPassword ? (
+              <PasswordReset initialEmail={username} onBack={() => setResetPassword(false)} />
             ) : authMode === "login" ? (
               /* ================== SIGN IN (LOGIN) ================== */
               <div className="space-y-5">
@@ -545,7 +552,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                   <div>
                     <label className="text-[11px] font-bold text-stone-700 block mb-1">
                       {activeRole === "customer"
-                        ? "Email or Mobile Number"
+                        ? "Email address"
                         : activeRole === "partner"
                         ? "Kitchen Email / Username"
                         : activeRole === "rider"
@@ -578,11 +585,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                       </label>
                       <button
                         type="button"
-                        onClick={() =>
-                          alert(
-                            "To reset your password, please register with your verified email or contact zuppo Admin."
-                          )
-                        }
+                        onClick={() => setResetPassword(true)}
                         className="text-[10px] text-orange-600 hover:underline font-bold"
                       >
                         Forgot?
@@ -634,7 +637,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                     Don&apos;t have an account?{" "}
                     <button
                       type="button"
-                      onClick={() => setAuthMode("register")}
+                      onClick={() => { setResetPassword(false); setAuthMode("register"); }}
                       className="font-black text-orange-600 hover:text-orange-700 underline underline-offset-4 cursor-pointer"
                     >
                       Make a new account
@@ -833,7 +836,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-black text-stone-700 flex items-center gap-1.5">
                             <Mail className="w-3.5 h-3.5 text-orange-600" />
-                            <span>Verify Email via Brevo OTP *</span>
+                            <span>Verify your email *</span>
                           </label>
                           {isEmailVerified && (
                             <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
@@ -870,8 +873,8 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                           <div className="flex items-center gap-2 pt-1 animate-in fade-in">
                             <input
                               type="text"
-                              maxLength={6}
-                              placeholder="6-digit OTP"
+                              maxLength={10}
+                              placeholder="Email code"
                               value={otpCode}
                               onChange={(e) => setOtpCode(e.target.value)}
                               className="w-32 bg-white border border-orange-500 rounded-xl px-3 py-2 text-xs text-stone-900 text-center font-mono tracking-widest outline-none font-bold shadow-xs"
@@ -1128,7 +1131,7 @@ export default function PortalLogin({ role = "customer" }: { role?: RoleType }) 
                     Already have an account?{" "}
                     <button
                       type="button"
-                      onClick={() => setAuthMode("login")}
+                      onClick={() => { setResetPassword(false); setAuthMode("login"); }}
                       className="font-black text-orange-600 hover:text-orange-700 underline underline-offset-4 cursor-pointer"
                     >
                       Sign in here
