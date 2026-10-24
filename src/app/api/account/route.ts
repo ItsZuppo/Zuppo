@@ -24,7 +24,11 @@ export async function PATCH(req: Request) {
   const metadata=data.user.user_metadata || {};
   let addresses: SavedAddress[]=Array.isArray(metadata.saved_addresses)?metadata.saved_addresses:[];
   const changes: Record<string,unknown>={};
-  if(body.action === "profile") {
+  if(body.action === "avatar") {
+   const base=(process.env.NEXT_PUBLIC_R2_PUBLIC_URL || process.env.NEXT_PUBLIC_CLOUDFLARE_R2_PUBLIC_DOMAIN || "https://pub-6173aeb8009d4efd9966052cb0ea9b71.r2.dev").replace(/\/$/,"");
+   if(typeof body.avatarUrl!=="string" || (body.avatarUrl && !body.avatarUrl.startsWith(`${base}/avatars/${actor.id}/`))) return json({success:false,error:"Upload your own profile photo first."},400);
+   changes.avatar_url=body.avatarUrl;
+  } else if(body.action === "profile") {
    if(typeof body.name!=="string" || !body.name.trim() || body.name.trim().length>80) return json({success:false,error:"Enter a name up to 80 characters."},400);
    if(typeof body.phone!=="string" || (body.phone && !/^\+?[\d\s()-]{7,20}$/.test(body.phone))) return json({success:false,error:"Enter a valid phone number."},400);
    changes.full_name=body.name.trim();changes.phone=body.phone.trim();

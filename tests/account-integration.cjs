@@ -12,6 +12,8 @@ const base=process.env.ACCOUNT_TEST_BASE_URL || 'http://localhost:3000';
  async function call(method,body,c=cookie){const r=await fetch(base+'/api/account',{method,headers:{'Content-Type':'application/json',cookie:c},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};}
  assert.equal((await call('GET',null,'')).status,401);
  assert.equal((await call('PATCH',{action:'profile',name:'',phone:''})).status,400);
+ assert.equal((await call('PATCH',{action:'avatar',avatarUrl:'https://evil.invalid/a.png'})).status,400);
+ assert.equal((await call('PATCH',{action:'avatar',avatarUrl:''})).body.success,true);
  assert.equal((await call('PATCH',{action:'profile',name:'Saved Customer',phone:'+91 9999999999',avatarUrl:'https://evil.invalid/a.png'})).status,400);
  assert.equal((await call('PATCH',{action:'profile',name:'Saved Customer',phone:'+91 9999999999',avatarUrl:'',role:'admin'})).body.success,true);
  let r=await call('GET');assert.equal(r.body.profile.name,'Saved Customer');

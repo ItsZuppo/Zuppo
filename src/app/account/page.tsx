@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MapPin, Navigation, Package, UserRound, LogOut, Camera, Plus, Trash2, ArrowLeft, RefreshCw, Check } from "lucide-react";
 import BrandLogo from "@/components/BrandLogo";
-import { compressImage } from "@/lib/imageCompression";
+import { prepareAvatar } from "@/lib/avatarImage";
 import { isServiceable } from "@/lib/delivery";
 
 type Address={id:string;label:string;address:string;lat:number;lng:number};
@@ -14,7 +14,7 @@ export default function AccountPage(){
  const router=useRouter();const [profile,setProfile]=useState<Profile|null>(null);const [orders,setOrders]=useState<Order[]>([]);
  const [tab,setTab]=useState("profile");const [name,setName]=useState("");const [phone,setPhone]=useState("");const [avatar,setAvatar]=useState("");
  const [label,setLabel]=useState("Home");const [address,setAddress]=useState("");const [coords,setCoords]=useState<{lat:number;lng:number}|null>(null);
- const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [orderError,setOrderError]=useState("");
+ const [uploading,setUploading]=useState(false);const [uploadStage,setUploadStage]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [orderError,setOrderError]=useState("");
  async function load(){
   const response=await fetch("/api/account",{cache:"no-store"});const data=await response.json();
   if(response.status===401){router.replace("/login");return;}
@@ -26,10 +26,24 @@ export default function AccountPage(){
   setBusy(true);setError("");setNotice("");
   try{const r=await fetch("/api/account",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!d.success)throw Error(d.error);await load();setNotice("Saved to your account.");return true;}catch(e){setError(e instanceof Error?e.message:"Could not save.");return false;}finally{setBusy(false);}
  }
- async function upload(file:File){
-  setBusy(true);setError("");
-  try{const image=await compressImage(file,{maxWidth:480,maxHeight:480,quality:.8});const form=new FormData();form.append("file",image.file);form.append("folder","avatars");const r=await fetch("/api/upload",{method:"POST",body:form});const d=await r.json();if(!d.success)throw Error(d.error);setAvatar(d.url);setNotice("Photo uploaded. Save your profile to apply it.");}catch(e){setError(e instanceof Error?e.message:"Photo upload failed.");}finally{setBusy(false);}
+ async function persistAvatar(url:string){
+  const response=await fetch("/api/account",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"avatar",avatarUrl:url})});
+  const result=await response.json();if(!result.success)throw Error(result.error || "Photo could not be saved.");
+  setAvatar(url);setProfile(p=>p?{...p,avatarUrl:url}:p);router.refresh();
  }
+ async function upload(file:File){
+  setBusy(true);setUploading(true);setError("");setNotice("");setUploadStage("Preparing photo…");
+  try{
+   const image=await prepareAvatar(file);const form=new FormData();form.append("file",image.file);form.append("folder","avatars");
+   setUploadStage("Uploading to Cloudflare…");
+   const r=await fetch("/api/upload",{method:"POST",body:form,signal:AbortSignal.timeout(60000)});
+   if(!r.ok){const text=await r.text();let message="Photo upload failed. Please try again.";try{message=JSON.parse(text).error || message;}catch{if(r.status===413)message="Photo is too large. Try a smaller photo.";}throw Error(message);}
+   const d=await r.json();if(!d.success)throw Error(d.error);
+   setUploadStage("Saving photo…");await persistAvatar(d.url);
+   setNotice(`Profile photo saved. ${image.originalKb} KB → ${image.uploadKb} KB, stored on Cloudflare.`);
+  }catch(e){setError(e instanceof Error?e.message:"Photo upload failed.");}finally{setBusy(false);setUploading(false);setUploadStage("");}
+ }
+ async function removeAvatar(){setBusy(true);setError("");try{await persistAvatar("");setNotice("Profile photo removed.");}catch(e){setError(e instanceof Error?e.message:"Could not remove photo.");}finally{setBusy(false);}}
  function locate(){
   setError("");if(!navigator.geolocation || !window.isSecureContext){setError("Location needs HTTPS and your permission.");return;}
   setBusy(true);navigator.geolocation.getCurrentPosition(p=>{const pin={lat:p.coords.latitude,lng:p.coords.longitude};setBusy(false);if(!isServiceable(pin.lat,pin.lng)){setError("This pin is outside our 12 km delivery area in Ambikapur.");return;}setCoords(pin);setNotice("GPS pin captured. Enter your house / flat and landmark, then save.");},()=>{setBusy(false);setError("Could not get location. Allow location permission, or enter map coordinates below.");},{enableHighAccuracy:true,timeout:15000});
@@ -49,8 +63,9 @@ export default function AccountPage(){
    {!profile?<div className="rounded-3xl bg-white p-8 text-stone-500">{error?<button onClick={()=>{setError("");load().catch(()=>setError("Could not load your account. Please retry."));}} className={button}>Retry loading account</button>:"Loading your account…"}</div>:<>
     {tab==="profile"&&<section className="rounded-3xl border border-stone-200 bg-white p-6 sm:p-8"><h2 className="text-xl font-black">A little about you</h2><p className="mt-1 text-sm text-stone-500">Keep your details up to date for smoother deliveries.</p>
      <div className="my-6 flex flex-wrap items-center gap-5">{avatar?<img src={avatar} alt="Your profile photo" className="h-24 w-24 rounded-full object-cover ring-4 ring-orange-50"/>:<div className="flex h-24 w-24 items-center justify-center rounded-full bg-orange-50 text-3xl font-black text-orange-600">{name.slice(0,1).toUpperCase()}</div>}
-      <label className="cursor-pointer rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold"><span className="flex items-center gap-2"><Camera size={16}/>Change photo</span><input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy} onChange={e=>{if(e.target.files?.[0])upload(e.target.files[0]);}}/></label>{avatar&&<button disabled={busy} onClick={()=>setAvatar("")} className="text-sm text-stone-500">Remove photo</button>}
+      <label className="cursor-pointer rounded-xl border border-stone-200 px-4 py-3 text-sm font-bold"><span className="flex items-center gap-2"><Camera size={16}/>{uploading ? uploadStage : "Change photo"}</span><input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy} onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)upload(file);}}/></label>{avatar&&<button disabled={busy} onClick={removeAvatar} className="text-sm text-stone-500">Remove photo</button>}
      </div>
+     <p className="mb-5 text-xs text-stone-500">Photos save automatically to Cloudflare. JPG, PNG or WebP; up to 25 MB before optimisation.</p>
      <form onSubmit={e=>{e.preventDefault();save({action:"profile",name,phone,avatarUrl:avatar});}} className="grid max-w-xl gap-4"><label className="text-sm font-semibold">Full name<input required maxLength={80} className={input} autoComplete="name" value={name} onChange={e=>setName(e.target.value)}/></label><label className="text-sm font-semibold">Email<input className={input+" text-stone-500"} value={profile.email} disabled/></label><label className="text-sm font-semibold">Mobile number<input className={input} type="tel" autoComplete="tel" value={phone} onChange={e=>setPhone(e.target.value)}/></label><button disabled={busy} className={button}>{busy?"Saving…":"Save profile"}</button></form>
      <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-stone-100 pt-5"><Link href="/login?reset=true" className="text-sm font-semibold text-orange-600">Password help</Link><button onClick={async()=>{const r=await fetch("/api/auth/logout",{method:"POST"});if(r.ok){router.push("/login");router.refresh();}else setError("Could not sign out. Retry.");}} className="flex items-center gap-2 text-sm font-bold text-stone-500"><LogOut size={16}/>Sign out</button></div>
     </section>}
