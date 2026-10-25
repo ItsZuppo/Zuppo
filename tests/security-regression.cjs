@@ -52,7 +52,7 @@ let count=0;
 async function check(label, fn) {await fn(); count++; console.log('PASS '+label);}
 (async()=>{
  await check('city centre allowed',()=>assert.equal(delivery.isServiceable(23.12,83.1985),true));
- await check('stationary rider syncs the first location for a new assignment',()=>{const p={lat:23.12,lng:83.1985};assert.equal(gps.shouldSyncRiderLocation(p,p,'old-order','new-order'),true);assert.equal(gps.shouldSyncRiderLocation(p,p,'same-order','same-order'),false);assert.equal(gps.shouldSyncRiderLocation(null,p,null,'new-order'),true);});
+ await check('stationary rider syncs the first location for a new assignment',()=>{const p={lat:23.12,lng:83.1985};assert.equal(gps.shouldSyncRiderLocation(p,p,'old-order','new-order'),true);assert.equal(gps.shouldSyncRiderLocation(p,p,'same-order','same-order'),false);assert.equal(gps.shouldSyncRiderLocation(null,p,null,'new-order'),true);assert.equal(gps.shouldSyncRiderLocation(p,p,'same','same',1000,22000),true);assert.equal(gps.shouldSyncRiderLocation(p,p,'same','same',1000,10000),false);});
  await check('outside 12 km rejected',()=>assert.equal(delivery.isServiceable(24,83.1985),false));
  await check('invalid/missing coordinates rejected',()=>{for(const pair of [[NaN,83],['23',83],[91,83],[23,undefined]])assert.equal(delivery.isServiceable(...pair),false);});
  await check('unauthenticated private order list denied',async()=>assert.equal((await orders.GET(request({}))).status,401));
@@ -100,7 +100,9 @@ async function check(label, fn) {await fn(); count++; console.log('PASS '+label)
  await check('wrong delivery PIN denied',async()=>assert.equal((await orders.PATCH(request({orderId:uid,status:'delivered',submittedPin:'9999'}))).status,400));
  failure={message:'write failed'};
  await check('failed delivery update is not acknowledged',async()=>assert.equal((await orders.PATCH(request({orderId:uid,status:'delivered',submittedPin:'1234'}))).status,503));failure=null;
+ rows=[{...order,status:'rider_assigned'}];
+ await check('assigned task cannot be delivered before pickup',async()=>assert.equal((await orders.PATCH(request({orderId:uid,status:'delivered',submittedPin:'1234'}))).status,409));
  rows=[{...order,status:'ready_for_pickup',rider_id:null}]; calls=[];
- await check('rider claim uses conditional DB ownership + state',async()=>{await orders.PATCH(request({orderId:uid,status:'picked_up'})); const c=calls.find(c=>c.action==='update');assert.ok(c.filters.some(f=>f[0]==='is'&&f[1]==='rider_id'&&f[2]===null)); assert.ok(c.filters.some(f=>f[1]==='status'&&f[2]==='ready_for_pickup'));});
+ await check('rider claim uses conditional DB ownership + state',async()=>{await orders.PATCH(request({orderId:uid,action:'accept'})); const c=calls.find(c=>c.action==='update');assert.equal(c.payload.status,'rider_assigned');assert.ok(c.filters.some(f=>f[0]==='is'&&f[1]==='rider_id'&&f[2]===null)); assert.ok(c.filters.some(f=>f[1]==='status'&&f[2]==='ready_for_pickup'));});
  console.log(`${count} security/delivery regression checks passed. Database/provider calls mocked; no live messages or orders created.`);
 })().catch(e=>{console.error(e);process.exitCode=1;});

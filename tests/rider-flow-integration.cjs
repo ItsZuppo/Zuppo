@@ -1,0 +1,29 @@
+// Opt-in: creates/deletes an isolated delivery, kitchen and customer/rider accounts.
+// Sends no real orders, payments or email notifications.
+if(process.env.RUN_RIDER_INTEGRATION!=="1"){console.log("Set RUN_RIDER_INTEGRATION=1 to run.");process.exit(0);}
+require('@next/env').loadEnvConfig(process.cwd());const{createClient}=require('@supabase/supabase-js');const crypto=require('node:crypto');const assert=require('node:assert/strict');const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});const base=process.env.RIDER_TEST_BASE_URL || 'http://localhost:3000';
+(async()=>{const users=[];let restaurantId,orderId;try{
+ const sessions=[];
+ for(const role of ['customer','rider','rider']){const email=`rider-qa-${crypto.randomUUID()}@example.invalid`,password=crypto.randomBytes(24).toString('hex');const u=await db.auth.admin.createUser({email,password,email_confirm:true,app_metadata:{role,status:'active'},user_metadata:{full_name:'Disposable Rider QA'}});if(u.error)throw u.error;users.push(u.data.user.id);const l=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,username:email,password})});const body=await l.json();assert.equal(body.success,true,JSON.stringify(body));sessions.push({id:u.data.user.id,cookie:l.headers.getSetCookie().find(x=>x.startsWith('ambibite_auth_session=')).split(';')[0]});}
+ const rest=await db.from('restaurants').insert({name:'Disposable QA pickup',cuisine:'QA only',phone:'+919999999999',slug:'qa-'+crypto.randomUUID(),area:'QA',address:'Disposable QA pickup only',is_open:false,is_blocked:true,latitude:23.1234,longitude:83.1933}).select('id').single();if(rest.error)throw rest.error;restaurantId=rest.data.id;
+ const order=await db.from('orders').insert({restaurant_id:restaurantId,restaurant_name:'Disposable QA pickup',customer_id:sessions[0].id,customer_name:'QA TEST DO NOT ACCEPT',customer_phone:'+919999999999',order_number:'#QA-'+crypto.randomUUID(),delivery_address:'QA only',delivery_lat:23.1155,delivery_lng:83.2045,item_total:50,delivery_fee:20,platform_fee:5,total_amount:75,payment_method:'COD',payment_status:'pending',status:'ready_for_pickup',delivery_pin:'7931'}).select('id').single();if(order.error)throw order.error;orderId=order.data.id;
+ async function patch(session,body){const r=await fetch(base+'/api/orders',{method:'PATCH',headers:{cookie:session.cookie,'Content-Type':'application/json'},body:JSON.stringify({orderId,...body})});return {status:r.status,body:await r.json()};}
+ await fetch(base+'/api/orders',{headers:{cookie:sessions[1].cookie}});const untouched=await db.from('orders').select('status,rider_id').eq('id',orderId).single();assert.equal(untouched.data.status,'ready_for_pickup');assert.equal(untouched.data.rider_id,null);
+ assert.equal((await patch(sessions[1],{status:'picked_up'})).status,403);
+ const claims=await Promise.all([patch(sessions[1],{action:'accept'}),patch(sessions[2],{action:'accept'})]);assert.deepEqual(claims.map(x=>x.status).sort(),[200,409]);const winIndex=claims[0].status===200?1:2;const winner=sessions[winIndex],loser=sessions[winIndex===1?2:1];const accepted=claims.find(c=>c.status===200).body.order;assert.equal(accepted.status,'rider_assigned');assert.equal(accepted.deliveryPin,undefined);
+ assert.equal((await patch(winner,{action:'accept'})).status,200);
+ assert.equal((await patch(winner,{status:'delivered',submittedPin:'7931'})).status,409);
+ assert.equal((await patch(loser,{riderLat:23.12,riderLng:83.1985})).status,403);
+ assert.equal((await patch(winner,{riderLat:23.12,riderLng:83.1985})).status,200);
+ const gps=await db.from('orders').select('status,rider_lat,rider_lng,rider_location_updated_at').eq('id',orderId).single();if(gps.error)throw gps.error;assert.equal(gps.data.status,'rider_assigned');assert.equal(Number(gps.data.rider_lat),23.12);assert.ok(gps.data.rider_location_updated_at);
+ assert.equal((await patch(winner,{action:'delivery-pin',deliveryLat:23.116,deliveryLng:83.2045,deliveryAddress:'QA corrected address'})).status,403);
+ assert.equal((await patch(sessions[0],{action:'delivery-pin',deliveryLat:24,deliveryLng:83,deliveryAddress:'QA corrected address'})).status,400);
+ assert.equal((await patch(sessions[0],{action:'delivery-pin',deliveryLat:23.116,deliveryLng:83.2045,deliveryAddress:'QA corrected address'})).status,200);
+ assert.equal((await patch(winner,{status:'picked_up'})).status,200);
+ const mine=await fetch(base+'/api/orders?id='+orderId,{headers:{cookie:sessions[0].cookie}});const detail=await mine.json();assert.equal(detail.orders[0].pickupLat,23.1234);assert.equal(detail.orders[0].deliveryLat,23.116);assert.equal(detail.orders[0].deliveryPin,'7931');
+ assert.equal((await patch(winner,{status:'delivered',submittedPin:'0000'})).status,400);
+ assert.equal((await patch(winner,{status:'delivered',submittedPin:'7931'})).status,200);
+ assert.equal((await patch(winner,{riderLat:23.12,riderLng:83.1985})).status,409);
+ assert.equal((await patch(sessions[0],{action:'delivery-pin',deliveryLat:23.116,deliveryLng:83.2045,deliveryAddress:'QA corrected address'})).status,409);
+ console.log('PASS: manual acceptance, two-rider claim race, idempotent accept, pickup before delivery, GPS ownership/persistence, exact pickup/drop pins, PIN verification and no GPS writes after delivery.');
+ }finally{if(orderId){await db.from('order_items').delete().eq('order_id',orderId);const d=await db.from('orders').delete().eq('id',orderId);if(d.error)throw d.error;}if(restaurantId){const d=await db.from('restaurants').delete().eq('id',restaurantId);if(d.error)throw d.error;}for(const id of users){const d=await db.auth.admin.deleteUser(id);if(d.error)throw d.error;}console.log('Disposable delivery and test accounts removed.');}})().catch(e=>{console.error(e);process.exitCode=1;});

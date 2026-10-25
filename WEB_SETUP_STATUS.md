@@ -80,3 +80,13 @@ The startup animation and auth changes were pushed to ItsZuppo/Zuppo main for Ve
 - Approval now rejects missing/unlinked identities, checks failed activation writes, and paginates Auth users. Partner provisioning failure removes the incomplete kitchen before reporting a retryable error.
 - Regression checks cover failed activation, nonexistent rider approval and incomplete-kitchen cleanup. Reserved .invalid/.test test addresses do not receive notification emails.
 - Opt-in test: RUN_STAFF_INTEGRATION=1, STAFF_ADMIN_EMAIL and STAFF_ADMIN_PASSWORD, then node tests/staff-signup-integration.cjs. STAFF_TEST_BASE_URL can target the deployed website. Tests do not verify real inbox delivery or upload real KYC documents; private KYC upload storage remains pending.
+
+## Rider acceptance and map repair (25 October 2026)
+- Accept is now an explicit action that atomically reserves a ready order as rider_assigned. Confirm pickup is separate; PIN completion requires picked_up. Two riders racing for one order have only one winner.
+- Rider UI prevents duplicate action clicks, ignores stale poll responses, does not overlap order polls, respects Offline, and hides passed offers. Removed the resetting fake countdown and simulated movement button.
+- Existing assigned deliveries resume with a clear message. They are not auto-created or auto-accepted by polling.
+- The map has been rebuilt around real stored restaurant pickup/order delivery coordinates and real rider GPS. No landmark guessing, fabricated midpoints or fake road fallback is displayed. Missing GPS pins are stated honestly. Restaurant pickup GPS is editable from partner Kitchen Profile; an order's customer can correct a missing/wrong delivery pin until delivery closes.
+- Map markers update in place; the camera only fits initially or on explicit recenter. Road requests use independent movement buckets, timeout/retry, and clear failure messages. Keyless OSM/OSRM remain the active provider until paid map credentials are configured.
+- Rider GPS is synced with 20-second stationary heartbeats on assigned active orders. Cross-order first sync, retry and ownership checks remain enforced.
+- RUN_RIDER_INTEGRATION=1 node tests/rider-flow-integration.cjs tests manual acceptance, concurrent claim, pickup gates, GPS ownership, customer pin correction, exact pickup/drop pins and PIN completion; it removes every QA order/kitchen/user afterward. RIDER_TEST_BASE_URL can target live. Device GPS and Ambikapur road/ETA accuracy need a real two-phone field test.
+- Provider recommendation, current official price references and the required Google account setup are in MAPS_AND_RIDER_PLAN.md. No paid service, billing account or API key has been created/activated by these changes.

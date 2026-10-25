@@ -1,4 +1,5 @@
 "use client";
+import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 
 import BrandLogo from "@/components/BrandLogo";
 import { shouldSyncRiderLocation } from "@/lib/riderGps";
@@ -69,6 +70,9 @@ interface RiderOrder {
   riderLng?: number;
   deliveryLat?: number;
   deliveryLng?: number;
+  pickupLat?: number;
+  pickupLng?: number;
+  pickupAddress?: string;
 }
 
 export default function RiderDashboard() {
@@ -79,6 +83,12 @@ export default function RiderDashboard() {
   const [liveOrders, setLiveOrders] = useState<RiderOrder[]>([]);
   const [cashCollected, setCashCollected] = useState(0);
   const [todayEarnings, setTodayEarnings] = useState(0);
+  const [skippedIds,setSkippedIds]=useState<string[]>([]);
+  const [actionOrderId,setActionOrderId]=useState<string|null>(null);
+  const actionLock=useRef(false);
+  const pollInFlight=useRef(false);
+  const pollSequence=useRef(0);
+  const [ordersError,setOrdersError]=useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"radar" | "active" | "wallet">("radar");
 
@@ -96,11 +106,10 @@ export default function RiderDashboard() {
   const [deliverySuccess, setDeliverySuccess] = useState(false);
 
   // Acceptance Timer per order (countdown from 30s)
-  const [timerSeconds, setTimerSeconds] = useState(30);
 
   // Live GPS Tracking & Synchronization
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<"active" | "simulated" | "denied" | "idle" | "requesting" | "error">("idle");
+  const [gpsStatus, setGpsStatus] = useState<"active" | "denied" | "idle" | "requesting" | "error">("idle");
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [gpsMessage, setGpsMessage] = useState("");
   const startGps = () => {
@@ -115,25 +124,15 @@ export default function RiderDashboard() {
   };
   const lastBroadcastRef = useRef<{ lat: number; lng: number } | null>(null);
   const syncInFlightRef = useRef(false);
+  const lastBroadcastAtRef = useRef(0);
   const lastBroadcastOrderRef = useRef<string | null>(null);
   const ordersRef = useRef<RiderOrder[]>([]);
   const userRef = useRef<any>(null);
-  const [simIndex, setSimIndex] = useState(0);
-
-  // Ambikapur road corridor coordinates along actual streets (OSRM)
-  const ambikapurCorridor: [number, number][] = [
-    [23.12341, 83.1933],  // 1. Gandhi Chowk (Pickup)
-    [23.12437, 83.19503], // 2. Main Market Road
-    [23.12295, 83.19799], // 3. Clock Tower Junction
-    [23.12091, 83.20262], // 4. Hospital Road
-    [23.11801, 83.20313], // 5. Ring Road South
-    [23.11559, 83.20455], // 6. Kedarpur (Customer Drop)
-  ];
 
   // Start continuous tracking only after the rider explicitly enables GPS.
   useEffect(() => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      setGpsStatus("simulated");
+      setGpsStatus("error");
       return;
     }
 
@@ -159,7 +158,7 @@ export default function RiderDashboard() {
         { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
       );
     } catch (e) {
-      setGpsStatus("simulated");
+      setGpsStatus("error");
     }
 
     return () => {
@@ -168,17 +167,6 @@ export default function RiderDashboard() {
       }
     };
   }, [isOnline, gpsEnabled]);
-
-  // Demo step mover for testing live synchronization on laptop
-  const advanceRiderLocation = async (orderId: string) => {
-    const nextIdx = (simIndex + 1) % ambikapurCorridor.length;
-    setSimIndex(nextIdx);
-    const [lat, lng] = ambikapurCorridor[nextIdx];
-    setGpsCoords({ lat, lng });
-    setGpsStatus("simulated");
-
-    setStatusMessage("Demo location only. Real customer tracking is unchanged.");
-  };
 
   // Initialize Audio
   useEffect(() => {
@@ -220,11 +208,14 @@ export default function RiderDashboard() {
 
   // Poll orders every 3 seconds for real-time radar sync
   const fetchRiderOrders = async () => {
+    if(pollInFlight.current)return;
+    pollInFlight.current=true;const sequence=++pollSequence.current;
     try {
       const res = await fetch("/api/orders");
       const data = await res.json();
-      if (data.success && data.orders) {
-        setLiveOrders(data.orders);
+      if(!res.ok || !data.success)throw Error(data.error || "Orders unavailable");
+      if (data.orders && sequence===pollSequence.current) {
+        setOrdersError("");setLiveOrders(data.orders);
 
         // Filter pending ready orders
         const pendingCount = data.orders.filter(
@@ -238,39 +229,31 @@ export default function RiderDashboard() {
         previousPendingCount.current = pendingCount;
       }
     } catch (e) {
-      console.warn("Rider orders fetch error:", e);
-    }
+      if(sequence===pollSequence.current)setOrdersError("Orders could not refresh. Check your connection and retry.");
+    } finally {pollInFlight.current=false;}
   };
 
   useEffect(() => {
     fetchRiderOrders();
     const interval = setInterval(fetchRiderOrders, 3000);
-    return () => clearInterval(interval);
+    return () => {clearInterval(interval);pollSequence.current++;};
   }, [soundEnabled]);
-
-  // Acceptance Countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimerSeconds((prev) => (prev <= 1 ? 30 : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Filter 1: Radar Orders (Available to pick up in Ambikapur)
   const radarOrders = liveOrders.filter((o) => {
-    if (o.status === "delivered" || o.status === "cancelled") return false;
+    if (!isOnline || skippedIds.includes(o.id)) return false;
     // Food is ready at kitchen OR unassigned
-    return o.status === "ready" || (o.status === "rider_assigned" && !o.riderName);
+    return o.status === "ready" && !o.riderId;
   });
 
   ordersRef.current = liveOrders;
   useEffect(() => {
     if(!isOnline || !gpsEnabled || gpsStatus!=="active" || !gpsCoords || syncInFlightRef.current)return;
     const activeOrder=liveOrders.find(o=>o.riderId===userRef.current?.id && (o.status==="picked_up" || o.status==="rider_assigned"));
-    if(!activeOrder || !shouldSyncRiderLocation(lastBroadcastRef.current,gpsCoords,lastBroadcastOrderRef.current,activeOrder.id))return;
+    if(!activeOrder || !shouldSyncRiderLocation(lastBroadcastRef.current,gpsCoords,lastBroadcastOrderRef.current,activeOrder.id,lastBroadcastAtRef.current))return;
     const point={...gpsCoords};syncInFlightRef.current=true;
     fetch("/api/orders",{method:"PATCH",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(15000),body:JSON.stringify({orderId:activeOrder.id,riderLat:point.lat,riderLng:point.lng})})
-      .then(response=>{if(!response.ok)throw Error("Location sync failed");lastBroadcastRef.current=point;lastBroadcastOrderRef.current=activeOrder.id;})
+      .then(response=>{if(!response.ok)throw Error("Location sync failed");lastBroadcastRef.current=point;lastBroadcastOrderRef.current=activeOrder.id;lastBroadcastAtRef.current=Date.now();})
       .catch(()=>setGpsMessage("GPS is available, but location sync failed. Check your connection; the next update will retry."))
       .finally(()=>{syncInFlightRef.current=false;});
   },[liveOrders,gpsCoords,gpsStatus,gpsEnabled,isOnline]);
@@ -291,6 +274,7 @@ export default function RiderDashboard() {
   useEffect(() => {
     if (!hasAutoSwitched.current && myActiveOrders.length > 0) {
       setActiveTab("active");
+      setStatusMessage("Resuming your existing assigned delivery.");
       hasAutoSwitched.current = true;
     }
   }, [myActiveOrders.length]);
@@ -309,37 +293,24 @@ export default function RiderDashboard() {
     setTodayEarnings(doneToday.reduce((s, o) => s + (o.riderEarnings || 0), 0));
   }, [liveOrders, currentUser]);
 
-  // Accept Order from Radar — server decides the winner (first come, first served)
-  const handleAcceptOrder = async (orderId: string) => {
-    try {
-      const res = await fetch("/api/orders", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, status: "picked_up" }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setStatusMessage("✅ Task Locked! Head to restaurant for pickup.");
-        playBellChime();
-        fetchRiderOrders();
-        setActiveTab("active");
-      } else {
-        setStatusMessage(`⚠️ ${data.error || "Could not accept this order."}`);
-        fetchRiderOrders();
-      }
-      setTimeout(() => setStatusMessage(null), 4000);
-    } catch (e) {
-      console.error(e);
-      setStatusMessage("⚠️ Network error, try again.");
-      setTimeout(() => setStatusMessage(null), 4000);
-    }
+  const handleTaskAction=async(orderId:string,pickup=false)=>{
+    if(actionLock.current)return;
+    if(!isOnline){setStatusMessage("Go online before accepting a task.");return;}
+    if(!pickup && myActiveOrders.length){setStatusMessage("Complete your active delivery before accepting another task.");return;}
+    actionLock.current=true;setActionOrderId(orderId);pollSequence.current++;
+    setStatusMessage(pickup?"Confirming pickup…":"Accepting task…");
+    try{
+      const res=await fetch("/api/orders",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(pickup?{orderId,status:"picked_up"}:{orderId,action:"accept"})});
+      const data=await res.json();if(!res.ok || !data.success)throw Error(data.error || "Could not update this task.");
+      pollSequence.current++;
+      hasAutoSwitched.current=true;
+      setLiveOrders(prev=>[data.order,...prev.filter(o=>o.id!==orderId)]);setActiveTab("active");
+      setStatusMessage(pickup?"Pickup confirmed. Navigate to the customer's saved pin.":"Task accepted. Go to the restaurant, then confirm pickup.");
+    }catch(e){setStatusMessage(e instanceof Error?e.message:"Connection failed. Refresh to check the task before retrying.");}
+    finally{actionLock.current=false;setActionOrderId(null);fetchRiderOrders();}
   };
-
-  // Reject / Pass Order
-  const handleRejectOrder = (orderId: string) => {
-    setStatusMessage("Order skipped. Loading next radar task...");
-    setTimeout(() => setStatusMessage(null), 3000);
-  };
+  const handleAcceptOrder=(orderId:string)=>handleTaskAction(orderId);
+  const handleRejectOrder=(orderId:string)=>{setSkippedIds(ids=>[...ids,orderId]);setStatusMessage("Task hidden from your radar. It remains available to other riders.");};
 
   // Open Doorstep Handshake Modal
   const openPinModal = (order: RiderOrder) => {
@@ -453,7 +424,7 @@ export default function RiderDashboard() {
                     : "bg-amber-50 text-amber-700 border-amber-200"
                 }`}
               >
-                {gpsStatus === "active" ? "GPS: LIVE" : gpsStatus === "requesting" ? "GPS: REQUESTING" : gpsStatus === "simulated" ? "GPS: DEMO" : gpsStatus === "denied" ? "GPS: BLOCKED" : "GPS: OFF"}
+                {gpsStatus === "active" ? "GPS: LIVE" : gpsStatus === "requesting" ? "GPS: REQUESTING" : gpsStatus === "denied" ? "GPS: BLOCKED" : "GPS: OFF"}
               </span>
               <button type="button" disabled={gpsStatus === "requesting"} onClick={startGps} className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[10px] font-bold text-orange-700 disabled:opacity-50">{gpsStatus === "requesting" ? "Finding GPS…" : gpsStatus === "active" ? "Refresh GPS" : gpsStatus === "denied" || gpsStatus === "error" ? "Retry GPS" : "Enable GPS"}</button>
             </div>
@@ -510,6 +481,8 @@ export default function RiderDashboard() {
 
         {/* Scrollable Tasks Body */}
         <main className="flex-1 p-4 overflow-y-auto space-y-4 pb-28">
+        {ordersError&&<p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{ordersError} <button onClick={fetchRiderOrders} className="font-bold underline">Retry</button></p>}
+
           {/* COD Cash Holding Banner */}
           <div
             className={`rounded-2xl p-3 border flex items-start gap-2.5 text-xs shadow-xs ${
@@ -557,14 +530,6 @@ export default function RiderDashboard() {
                     key={order.id}
                     className="bg-white rounded-3xl p-5 border border-[#EDE5DA] shadow-[0_10px_25px_rgba(200,180,160,0.1)] space-y-4 relative overflow-hidden"
                   >
-                    {/* 30-Second Acceptance Countdown Bar */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-stone-100">
-                      <div
-                        className="h-full bg-gradient-to-r from-orange-600 to-amber-500 transition-all duration-1000"
-                        style={{ width: `${(timerSeconds / 30) * 100}%` }}
-                      />
-                    </div>
-
                     <div className="flex items-center justify-between pt-1">
                       <span className="bg-orange-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-xs">
                         {order.orderNumber}
@@ -587,7 +552,7 @@ export default function RiderDashboard() {
                             {order.restaurantName}
                           </strong>
                           <span className="text-[11px] text-stone-500">
-                            Gandhi Chowk Main Market (0.8 km)
+                            {order.pickupAddress || "Pickup address not configured"}
                           </span>
                         </div>
                       </div>
@@ -615,24 +580,26 @@ export default function RiderDashboard() {
                         <strong className="text-stone-900">₹{order.totalAmount}</strong> ({order.paymentMethod})
                       </span>
                       <span className="text-[10px] text-stone-400 font-bold">
-                        {timerSeconds}s left
+                        Available until another rider accepts
                       </span>
                     </div>
 
                     {/* Dual Action Buttons */}
                     <div className="grid grid-cols-3 gap-2">
                       <button
+                        disabled={!!actionOrderId}
                         onClick={() => handleRejectOrder(order.id)}
                         className="py-3 px-3 rounded-2xl border border-[#E5DDD2] bg-white hover:bg-stone-50 text-stone-600 font-bold text-xs transition cursor-pointer"
                       >
                         Pass
                       </button>
                       <button
+                        disabled={!!actionOrderId || !isOnline || myActiveOrders.length>0}
                         onClick={() => handleAcceptOrder(order.id)}
                         className="col-span-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-black text-xs shadow-lg shadow-orange-500/20 hover:shadow-xl transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Check className="w-4 h-4 stroke-[3]" />
-                        <span>ACCEPT TASK (Earn ₹{order.riderEarnings || 38})</span>
+                        <span>{actionOrderId===order.id ? "ACCEPTING…" : myActiveOrders.length ? "Finish your active task first" : "ACCEPT TASK"}</span>
                       </button>
                     </div>
                   </div>
@@ -642,9 +609,9 @@ export default function RiderDashboard() {
                   <div className="w-14 h-14 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center mx-auto shadow-inner">
                     <Bike className="w-7 h-7" />
                   </div>
-                  <h4 className="font-black text-stone-900 text-base">Radar Scanning...</h4>
+                  <h4 className="font-black text-stone-900 text-base">{isOnline?"Radar scanning":"You are offline"}</h4>
                   <p className="text-xs text-stone-500 max-w-xs mx-auto leading-relaxed">
-                    Searching for active kitchen dispatch in Ambikapur. Keep app open to receive alerts with bell ring.
+                    {isOnline?"Ready orders will appear here. Accept a task manually to reserve it.":"Go online to see available pickup tasks."}
                   </p>
                   <button
                     onClick={playBellChime}
@@ -673,7 +640,7 @@ export default function RiderDashboard() {
                   >
                     <div className="flex items-center justify-between pb-3 border-b border-stone-100">
                       <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
-                        In Transit • {order.orderNumber}
+                        {order.status==="rider_assigned" ? "Awaiting pickup" : "In transit"} • {order.orderNumber}
                       </span>
                       <span className="text-xs font-bold text-stone-500">
                         {order.deliveryArea.split(",")[0]}
@@ -701,7 +668,7 @@ export default function RiderDashboard() {
                       <div className="flex items-center justify-between text-[11px] font-bold text-stone-600 px-1">
                         <span className="flex items-center gap-1.5">
                           <Navigation className="w-3.5 h-3.5 text-orange-600" />
-                          <span>Customer Drop Route • {order.deliveryArea.split(",")[0]}</span>
+                          <span>{order.status==="rider_assigned" ? "Route to pickup" : "Route to customer"}</span>
                         </span>
                         <span className="text-[10px] text-stone-400 font-bold">OpenStreetMap</span>
                       </div>
@@ -713,26 +680,19 @@ export default function RiderDashboard() {
                         riderLocationUpdatedAt={gpsStatus === "active" ? new Date().toISOString() : undefined}
                         riderLat={gpsStatus === "active" ? gpsCoords?.lat : undefined}
                         riderLng={gpsStatus === "active" ? gpsCoords?.lng : undefined}
+                        restaurantLat={order.pickupLat}
+                        restaurantLng={order.pickupLng}
+                        destination={order.status==="rider_assigned" ? "pickup" : "drop"}
                         customerLat={order.deliveryLat}
                         customerLng={order.deliveryLng}
                         height="200px"
                       />
                     </div>
 
-                    {/* Quick Demo Mover for testing on Laptop */}
-                    <button
-                      onClick={() => advanceRiderLocation(order.id)}
-                      className="w-full py-2 px-3 rounded-xl border border-dashed border-orange-300 bg-orange-50/70 hover:bg-orange-100 text-orange-800 font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <Bike className="w-3.5 h-3.5 text-orange-600" />
-                      <span>Simulate Rider Step ({simIndex + 1}/5) • Syncs to Customer Screen</span>
-                    </button>
-
                     {/* Navigation External GPS Button */}
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        order.deliveryArea + ", Ambikapur"
-                      )}`}
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(order.status==="rider_assigned" ? (order.pickupLat!=null && order.pickupLng!=null ? `${order.pickupLat},${order.pickupLng}` : order.pickupAddress || order.restaurantName+", Ambikapur") : (order.deliveryLat!=null && order.deliveryLng!=null ? `${order.deliveryLat},${order.deliveryLng}` : order.deliveryArea))}&travelmode=driving&dir_action=navigate`}
+
                       target="_blank"
                       rel="noreferrer"
                       className="w-full py-2.5 px-4 rounded-xl border border-[#E5DDD2] bg-white hover:bg-stone-50 text-stone-900 font-bold text-xs flex items-center justify-center gap-2 transition"
@@ -741,7 +701,7 @@ export default function RiderDashboard() {
                       <span>Open in Google Maps App (Turn-by-turn Voice)</span>
                     </a>
 
-                    {/* Big Action: Open Doorstep PIN Modal */}
+                    {order.status==="rider_assigned" ? <button disabled={!!actionOrderId} onClick={()=>handleTaskAction(order.id,true)} className="w-full rounded-2xl bg-orange-600 p-4 text-sm font-bold text-white disabled:opacity-50">{actionOrderId===order.id?"Confirming…":"I have collected the food — confirm pickup"}</button> : (
                     <button
                       onClick={() => openPinModal(order)}
                       className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-black text-xs shadow-lg shadow-orange-500/25 hover:shadow-xl transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
@@ -749,19 +709,13 @@ export default function RiderDashboard() {
                       <KeyRound className="w-4 h-4" />
                       <span>Deliver Food • Enter Customer PIN</span>
                     </button>
+                    )}
+
                   </div>
                 ))
               ) : (
                 <div className="bg-white rounded-3xl p-6 border border-[#EDE5DA] text-center space-y-4 shadow-xs">
-                  <div className="rounded-2xl overflow-hidden border border-[#EDE5DA]">
-                    <AmbikapurDeliveryMap
-                      mode="rider"
-                      restaurantName="The Royal Kitchen"
-                      customerArea="Kedarpur Residential Zone, Ambikapur"
-                      orderNumber="READY"
-                      height="180px"
-                    />
-                  </div>
+                  <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-50"><Navigation className="h-9 w-9 text-orange-600"/></div>
                   <div>
                     <h4 className="font-bold text-stone-900 text-sm">No Active Delivery in Transit</h4>
                     <p className="text-xs text-stone-500 mt-1">

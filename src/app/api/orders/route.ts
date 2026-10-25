@@ -61,6 +61,9 @@ export interface LiveOrder {
   riderLocationUpdatedAt?: string;
   deliveryLat?: number;
   deliveryLng?: number;
+  pickupLat?: number;
+  pickupLng?: number;
+  pickupAddress?: string;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -121,6 +124,9 @@ function rowToOrder(o: any): LiveOrder {
     riderLat: o.rider_lat != null ? Number(o.rider_lat) : undefined,
     riderLng: o.rider_lng != null ? Number(o.rider_lng) : undefined,
     riderLocationUpdatedAt: o.rider_location_updated_at ?? undefined,
+    pickupLat: o.restaurants?.latitude != null ? Number(o.restaurants.latitude) : undefined,
+    pickupLng: o.restaurants?.longitude != null ? Number(o.restaurants.longitude) : undefined,
+    pickupAddress: o.restaurants?.address || undefined,
     deliveryLat: o.delivery_lat != null ? Number(o.delivery_lat) : undefined,
     deliveryLng: o.delivery_lng != null ? Number(o.delivery_lng) : undefined,
   };
@@ -154,7 +160,7 @@ function scopeOrders(orders: LiveOrder[], user: AuthUser | null, idParam: string
 async function loadRecord(orderId: string): Promise<LiveOrder | null> {
   // Always prefer DB (source of truth); memory is only for orders that never reached DB
   try {
-    const q = matchOrder(supabase.from("orders").select("*, order_items(*)"), orderId);
+    const q = matchOrder(supabase.from("orders").select("*, order_items(*), restaurants(latitude,longitude,address)"), orderId);
     const { data } = await q.maybeSingle();
     if (data) {
       return rowToOrder(data);
@@ -170,7 +176,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ success: false, error: "Please log in first." }, { status: 401 });
   const id = new URL(req.url).searchParams.get("id");
   try {
-    let query = supabase.from("orders").select("*, order_items(*)").order("created_at", { ascending: false });
+    let query = supabase.from("orders").select("*, order_items(*), restaurants(latitude,longitude,address)").order("created_at", { ascending: false });
     if (id) query = matchOrder(query, id);
     if (user.role === "customer") query = query.eq("customer_id", user.id);
     if (user.role === "partner") {
@@ -248,6 +254,8 @@ export async function PATCH(req: Request) {
   try {
     const body = await req.json();
     const { orderId, status, submittedPin, newPin, riderLat, riderLng } = body;
+    const accepting = body.action === "accept";
+    const correctingPin=body.action==="delivery-pin";
 
     if (!orderId) {
       return NextResponse.json({ success: false, error: "Missing orderId" }, { status: 400 });
@@ -259,13 +267,23 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: "Please log in first." }, { status: 401 });
     }
     const isAdmin = user.role === "admin";
-    if (!status && !newPin && riderLat === undefined && riderLng === undefined) return NextResponse.json({ success: false, error: "No update supplied" }, { status: 400 });
+    if (!correctingPin && !accepting && !status && !newPin && riderLat === undefined && riderLng === undefined) return NextResponse.json({ success: false, error: "No update supplied" }, { status: 400 });
     if ((riderLat !== undefined || riderLng !== undefined) && !validCoords(riderLat, riderLng)) return NextResponse.json({ success: false, error: "Invalid GPS coordinates" }, { status: 400 });
     if (newPin && !/^\d{4}$/.test(String(newPin))) return NextResponse.json({ success: false, error: "Invalid delivery PIN" }, { status: 400 });
 
     const record = await loadRecord(orderId);
     if (!record) {
       return NextResponse.json({ success: false, error: "Order not found." }, { status: 404 });
+    }
+
+    if(correctingPin){
+      if(user.role!=="customer" || record.customerId!==user.id)return NextResponse.json({success:false,error:"Only the order owner can set its delivery pin."},{status:403});
+      if(["delivered","cancelled"].includes(record.status))return NextResponse.json({success:false,error:"This delivery is already closed."},{status:409});
+      if(!isServiceable(body.deliveryLat,body.deliveryLng) || typeof body.deliveryAddress!=="string" || body.deliveryAddress.trim().length<8 || body.deliveryAddress.length>500)return NextResponse.json({success:false,error:"Provide a complete address and a GPS pin inside our Ambikapur delivery area."},{status:400});
+      const {data:saved,error}=await supabase.from("orders").update({delivery_lat:body.deliveryLat,delivery_lng:body.deliveryLng,delivery_address:body.deliveryAddress.trim()}).eq("id",record.id).eq("customer_id",user.id).eq("status",record.status==="ready"?"ready_for_pickup":record.status).select("id");
+      if(error)return NextResponse.json({success:false,error:"Delivery pin was not saved. Please retry."},{status:503});
+      if(!saved?.length)return NextResponse.json({success:false,error:"Order changed. Refresh before correcting the pin."},{status:409});
+      return NextResponse.json({success:true,order:sanitize({...record,deliveryLat:body.deliveryLat,deliveryLng:body.deliveryLng,deliveryArea:body.deliveryAddress.trim()},{pin:true,phone:true})});
     }
 
     // ---- 2. Authorization (who may do what) ---------------------------------
@@ -304,40 +322,24 @@ export async function PATCH(req: Request) {
 
     if ((riderLat !== undefined || riderLng !== undefined) && !["picked_up", "rider_assigned"].includes(record.status)) return NextResponse.json({ success: false, error: "Delivery is not active" }, { status: 409 });
 
-    // ---- 3. Rider ACCEPT: atomic, first-come-first-served -------------------
-    // The conditional UPDATE only succeeds while rider_id IS NULL, so even if
-    // 25 riders tap Accept in the same millisecond exactly ONE wins.
-    if (status === "picked_up" && !isAdmin) {
-      if (record.riderId !== user.id) {
-        if (record.status !== "ready" || record.riderId) {
-          return NextResponse.json(
-            { success: false, error: "Ye order kisi aur rider ne le liya ya abhi ready nahi hai." },
-            { status: 409 }
-          );
-        }
-        if (isUuid(record.id)) {
-          const { data: claimed, error: claimErr } = await supabase
-            .from("orders")
-            .update({ status: "picked_up", rider_id: user.id, rider_name: user.name })
-            .eq("id", record.id)
-            .is("rider_id", null)
-            .eq("status", "ready_for_pickup")
-            .select("id");
-          if (claimErr) {
-            return NextResponse.json({ success: false, error: "Could not lock order, try again." }, { status: 500 });
-          }
-          if (!claimed || claimed.length === 0) {
-            return NextResponse.json(
-              { success: false, error: "Ye order kisi aur rider ne le liya." },
-              { status: 409 }
-            );
-          }
-        }
-        const claimedOrder: LiveOrder = { ...record, status: "picked_up", riderId: user.id, riderName: user.name };
-
-        return NextResponse.json({ success: true, message: "Task locked to you.", order: sanitize(claimedOrder, { phone: true }) });
-      }
-      // Already mine (resume after relogin) -> fall through, nothing to change
+    // Accept reserves the task; pickup is a separate deliberate action.
+    if (accepting) {
+      if(user.role!=="rider" || status || newPin || riderLat!==undefined || riderLng!==undefined)return NextResponse.json({success:false,error:"Invalid acceptance request."},{status:400});
+      if(record.riderId===user.id && ["rider_assigned","picked_up"].includes(record.status))return NextResponse.json({success:true,order:sanitize(record,{phone:true})});
+      if(record.status!=="ready" || record.riderId)return NextResponse.json({success:false,error:"This order is no longer available."},{status:409});
+      const {data:active,error:activeError}=await supabase.from("orders").select("id,status").eq("rider_id",user.id).in("status",["rider_assigned","picked_up"]);
+      if(activeError)return NextResponse.json({success:false,error:"Could not check your active delivery. Please retry."},{status:503});
+      if(active?.some(o=>o.id!==record.id && ["rider_assigned","picked_up"].includes(o.status)))return NextResponse.json({success:false,error:"Complete your active delivery before accepting another task."},{status:409});
+      const {data:claimed,error:claimErr}=await supabase.from("orders")
+        .update({status:"rider_assigned",rider_id:user.id,rider_name:user.name})
+        .eq("id",record.id).is("rider_id",null).eq("status","ready_for_pickup").select("id");
+      if(claimErr)return NextResponse.json({success:false,error:"Order acceptance was not saved. Refresh to check before retrying."},{status:503});
+      if(!claimed?.length)return NextResponse.json({success:false,error:"Another rider accepted this order. Refresh the list."},{status:409});
+      return NextResponse.json({success:true,order:sanitize({...record,status:"rider_assigned",riderId:user.id,riderName:user.name},{phone:true})});
+    }
+    if(status==="picked_up" && !isAdmin){
+      if(record.riderId!==user.id)return NextResponse.json({success:false,error:"Accept this task before confirming pickup."},{status:403});
+      if(!["rider_assigned","picked_up"].includes(record.status))return NextResponse.json({success:false,error:"This task is not awaiting pickup."},{status:409});
     }
 
     // ---- 4. Delivery: must be the assigned rider + correct PIN --------------
@@ -345,8 +347,8 @@ export async function PATCH(req: Request) {
       if (!isAdmin && record.riderId !== user.id) {
         return NextResponse.json({ success: false, error: "This is not your delivery." }, { status: 403 });
       }
-      if (!["picked_up", "rider_assigned"].includes(record.status)) {
-        return NextResponse.json({ success: false, error: "Order is not out for delivery." }, { status: 409 });
+      if (record.status !== "picked_up") {
+        return NextResponse.json({ success: false, error: "Confirm pickup before completing delivery." }, { status: 409 });
       }
       // PIN always read from DB (customer may have regenerated it a second ago)
       const expected = String(record.deliveryPin || "").trim();

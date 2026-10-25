@@ -1,6 +1,7 @@
 "use client";
 
 import BrandLogo from "@/components/BrandLogo";
+import KitchenPickupLocation from "@/components/KitchenPickupLocation";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1190,6 +1191,7 @@ export default function RestaurantPartnerHub() {
               <span className="text-xs text-slate-500 font-mono">ID: {activeKitchen.id}</span>
             </div>
 
+            <KitchenPickupLocation restaurantId={activeKitchen.id}/>
             <form onSubmit={handleSaveKitchenProfile} className="space-y-4 text-xs">
               <div>
                 <label className="font-bold text-slate-300 block mb-1">Kitchen Name *</label>

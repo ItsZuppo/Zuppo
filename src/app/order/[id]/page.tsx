@@ -25,6 +25,7 @@ import {
   Home,
   Navigation,
 } from "lucide-react";
+import OrderDeliveryPin from "@/components/OrderDeliveryPin";
 import AmbikapurDeliveryMap from "@/components/AmbikapurDeliveryMap";
 
 interface OrderItem {
@@ -60,6 +61,8 @@ interface OrderDetail {
   riderLng?: number;
   deliveryLat?: number;
   deliveryLng?: number;
+  pickupLat?: number;
+  pickupLng?: number;
 }
 
 export default function OrderTrackingPage() {
@@ -361,13 +364,18 @@ export default function OrderTrackingPage() {
             customerArea={order.deliveryArea}
             orderNumber={order.orderNumber}
             mode="customer"
+            destination={order.status==="rider_assigned"?"pickup":"drop"}
             riderLocationUpdatedAt={order.riderLocationUpdatedAt}
             riderLat={order.riderLat}
             riderLng={order.riderLng}
+            restaurantLat={order.pickupLat}
+            restaurantLng={order.pickupLng}
             customerLat={order.deliveryLat}
             customerLng={order.deliveryLng}
             height="270px"
           />
+
+          {!["delivered","cancelled"].includes(order.status)&&<OrderDeliveryPin orderId={order.id} address={order.deliveryArea} hasPin={Number.isFinite(order.deliveryLat)&&Number.isFinite(order.deliveryLng)} onSaved={fetchOrder}/>}
 
           {/* Partner & Rider Contact Cards */}
           <div className="p-4 grid grid-cols-2 gap-2 text-xs">
