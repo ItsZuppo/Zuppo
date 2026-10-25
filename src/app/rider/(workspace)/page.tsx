@@ -388,14 +388,9 @@ export default function RiderDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-stone-900 flex justify-center items-start sm:py-6 font-sans antialiased selection:bg-orange-500 selection:text-white">
-      {/* Mobile Device Simulation Shell */}
-      <div className="w-full max-w-md bg-[#FAF7F2] text-stone-900 min-h-screen sm:min-h-[850px] sm:rounded-[40px] flex flex-col relative shadow-2xl sm:border-[8px] sm:border-stone-800 overflow-hidden">
-        {/* Dynamic Island / Speaker cutout simulation */}
-        <div className="hidden sm:flex justify-center pt-2.5 pb-1 bg-white">
-          <div className="w-24 h-4 bg-stone-900 rounded-full" />
-        </div>
-
+    <div className="h-full min-h-0 bg-[#FAF7F2] text-stone-900 flex justify-center items-stretch font-sans antialiased selection:bg-orange-500 selection:text-white">
+      {/* Responsive rider workspace */}
+      <div className="w-full max-w-3xl h-full min-h-0 bg-[#FAF7F2] text-stone-900 flex flex-col relative border-x border-stone-200 overflow-hidden">
         {/* Top App Header */}
         <header className="bg-white px-5 py-3.5 border-b border-[#EDE5DA] flex items-center justify-between sticky top-0 z-30 shadow-xs">
           <div>
@@ -480,7 +475,7 @@ export default function RiderDashboard() {
         )}
 
         {/* Scrollable Tasks Body */}
-        <main className="flex-1 p-4 overflow-y-auto space-y-4 pb-28">
+        <main className="min-h-0 flex-1 p-4 overflow-y-auto space-y-4 pb-28">
         {ordersError&&<p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{ordersError} <button onClick={fetchRiderOrders} className="font-bold underline">Retry</button></p>}
 
           {/* COD Cash Holding Banner */}
