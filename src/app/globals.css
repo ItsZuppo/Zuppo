@@ -42,7 +42,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .portal-loading { min-height:100dvh; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:16px; background:#0f172a; color:#cbd5e1; font-size:13px; }
 .portal-spinner { height:30px; width:30px; border:3px solid #334155; border-top-color:#fb923c; border-radius:50%; animation:portal-spin .7s linear infinite; }
 .portal-skeleton { height:64px; width:min(80vw,440px); border-radius:16px; background:linear-gradient(90deg,#172033,#25314a,#172033); background-size:200% 100%; animation:portal-shimmer 1.4s ease infinite; }
-.leaflet-container { font-family:inherit; background:#e8ede5; }
+.leaflet-container { font-family:inherit; background:#f8fafc; width:100%; height:100%; z-index:1; }
+.leaflet-container img, .leaflet-tile { max-width:none!important; max-height:none!important; }
 .leaflet-control-attribution { max-width:90vw; font-size:10px!important; background:rgba(255,255,255,.94)!important; border-radius:6px 0 0 0; }
 @keyframes portal-enter { from { opacity:.5; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
 @keyframes portal-spin { to { transform:rotate(360deg); } }

@@ -1265,66 +1265,18 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
 
       {/* Ambikapur Location Picker Modal */}
       {isLocationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setIsLocationModalOpen(false)}
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs animate-in fade-in"
-          />
-          <div className="relative bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl z-10 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-orange-600" />
-                <h3 className="font-black text-slate-900 text-base">Select Ambikapur Area</h3>
-              </div>
-              <button
-                onClick={() => setIsLocationModalOpen(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <button onClick={useCurrentLocation} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-bold text-white">Enable GPS / use my current location</button>
-            {locationMessage && <p role="status" className="text-xs mt-2">{locationMessage}</p>}
-            <div className="py-4 space-y-2">
-              {[
-                { name: "Gandhi Chowk (Central)", tag: "Standard delivery fee applies", dist: "1.2 km" },
-                { name: "Ghadi Chowk (Clock Tower)", tag: "Fast Delivery", dist: "1.8 km" },
-                { name: "Ring Road East (Transport Nagar)", tag: "Standard Delivery", dist: "3.2 km" },
-                { name: "Kedarpur Residential Zone", tag: "Standard Delivery", dist: "2.5 km" },
-                { name: "Sadhar Hospital Road", tag: "Fast Delivery", dist: "1.0 km" },
-                { name: "Mahamaya Temple Road", tag: "Extended Zone", dist: "3.8 km" },
-              ].map((loc, i) => (
-                <div
-                  key={i}
-                  onClick={() => {
-                    setSelectedLocation(loc.name);
-                    setDeliveryCoords(null);
-                    setLocationMessage("");
-                    setIsLocationModalOpen(false);
-                  }}
-                  className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${selectedLocation.includes(loc.name.split(" ")[0])
-                      ? "bg-orange-50 border-orange-500 shadow-xs"
-                      : "bg-slate-50 border-slate-100 hover:bg-slate-100/80 hover:border-slate-200"
-                    }`}
-                >
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">{loc.name}</h4>
-                    <span className="text-[10px] text-orange-600 font-bold">{loc.tag}</span>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400">{loc.dist}</span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setIsLocationModalOpen(false)}
-              className="w-full bg-slate-900 hover:bg-black text-white font-black text-xs py-3.5 rounded-2xl transition"
-            >
-              Confirm Location
-            </button>
-          </div>
-        </div>
+        <ZomatoLocationModal
+          initialCoords={deliveryCoords}
+          initialAddress={selectedLocation}
+          onClose={() => setIsLocationModalOpen(false)}
+          onConfirm={(loc) => {
+            setSelectedLocation(loc.label);
+            setDeliveryCoords({ lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy });
+            setDeliveryDetails((current) => ({ ...current, area: loc.area }));
+            setLocationMessage(`Exact GPS pin locked (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)})`);
+            setIsLocationModalOpen(false);
+          }}
+        />
       )}
 
       {/* Footer */}
