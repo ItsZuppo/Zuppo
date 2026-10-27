@@ -270,12 +270,12 @@ export default function ZomatoLocationModal({
           {/* Quick Ambikapur Area Chips */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {[
-              { name: "Bilaspur Chowk", lat: 23.1038, lng: 83.1872 },
-              { name: "Gandhi Chowk", lat: 23.12341, lng: 83.1933 },
-              { name: "Ghadi Chowk", lat: 23.12295, lng: 83.19799 },
-              { name: "Kedarpur", lat: 23.11559, lng: 83.20455 },
-              { name: "Ring Road East", lat: 23.11801, lng: 83.20313 },
-              { name: "Mahamaya Road", lat: 23.1315, lng: 83.1892 },
+              { name: "Bilaspur Chowk", lat: 23.09875, lng: 83.18685 },
+              { name: "Mahamaya Chowk", lat: 23.12265, lng: 83.19815 },
+              { name: "Sangam Chowk", lat: 23.12275, lng: 83.19675 },
+              { name: "Ghadi Chowk", lat: 23.12575, lng: 83.19325 },
+              { name: "Gandhi Chowk", lat: 23.12710, lng: 83.19120 },
+              { name: "Kedarpur", lat: 23.12920, lng: 83.19580 },
             ].map((spot) => (
               <button
                 key={spot.name}
