@@ -224,8 +224,10 @@ export default function OrderTrackingPage() {
           <div className="p-5 pb-4 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block">
-                  {order.status === "delivered"
+                <span className={`text-[10px] font-black uppercase tracking-wider block ${order.status === "cancelled" ? "text-rose-600" : "text-orange-600"}`}>
+                  {order.status === "cancelled"
+                    ? "Order Cancelled"
+                    : order.status === "delivered"
                     ? "Completed"
                     : order.status === "picked_up"
                     ? "Rider is on the way"
@@ -234,17 +236,27 @@ export default function OrderTrackingPage() {
                     : "Kitchen is preparing your order"}
                 </span>
                 <h2 className="text-xl font-black text-stone-900">
-                  {order.status === "delivered" ? "Order Delivered!" : "Arriving in 15–20 Mins"}
+                  {order.status === "cancelled"
+                    ? "Order Was Cancelled"
+                    : order.status === "delivered"
+                    ? "Order Delivered!"
+                    : "Arriving in 15–20 Mins"}
                 </h2>
               </div>
               <span
                 className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                  order.status === "delivered"
+                  order.status === "cancelled"
+                    ? "bg-rose-50 text-rose-700 border-rose-300"
+                    : order.status === "delivered"
                     ? "bg-emerald-50 text-emerald-700 border-emerald-300"
                     : "bg-orange-50 text-orange-700 border-orange-300 animate-pulse"
                 }`}
               >
-                {order.status === "delivered" ? "Delivered" : "Live Tracking"}
+                {order.status === "cancelled"
+                  ? "Cancelled"
+                  : order.status === "delivered"
+                  ? "Delivered"
+                  : "Live Tracking"}
               </span>
             </div>
 
@@ -314,7 +326,7 @@ export default function OrderTrackingPage() {
               height="300px"
             />
 
-            {order.status !== "delivered" && (
+            {order.status !== "delivered" && order.status !== "cancelled" && (
               <OrderDeliveryPin
                 orderId={order.id}
                 address={order.deliveryArea}
