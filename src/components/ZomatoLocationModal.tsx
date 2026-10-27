@@ -113,6 +113,11 @@ export default function ZomatoLocationModal({
           updatePolygon(c.lat, c.lng);
         });
 
+        instance.on("click", (e: any) => {
+          if (!instance || !e?.latlng) return;
+          instance.panTo(e.latlng, { animate: true });
+        });
+
         instance.on("moveend", () => {
           if (!instance) return;
           const c = instance.getCenter();

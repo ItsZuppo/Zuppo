@@ -233,7 +233,7 @@ export async function POST(req: Request) {
     const row = {
       order_number: `#ZB-${randomUUID()}`, restaurant_id: restaurantId, restaurant_name: restaurant.name,
       customer_id: user.id, customer_name: String(body.customerName || user.name).trim(), customer_phone: phone,
-      delivery_address: `${body.addressDetails.trim()}, ${String(body.deliveryArea || "").trim()}`, delivery_lat: coords.lat, delivery_lng: coords.lng,
+      delivery_address: body.addressDetails.trim() === String(body.deliveryArea || "").trim() ? body.addressDetails.trim() : `${body.addressDetails.trim()}, ${String(body.deliveryArea || "").trim()}`, delivery_lat: coords.lat, delivery_lng: coords.lng,
       item_total: itemTotal, delivery_fee: DELIVERY_FEE, platform_fee: PLATFORM_FEE, total_amount: total,
       payment_method: "COD", payment_status: "pending", status: "placed", delivery_pin: randomPin(),
       distance_km: km, rider_earnings: Math.max(35, 25 + Math.round(Math.max(0, km-1)*7)+5),

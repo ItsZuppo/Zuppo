@@ -542,7 +542,7 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
           customerName: customerName.trim() || "Ambikapur Customer",
           customerPhone: customerPhone.trim() || "+91 98261 44551",
           deliveryArea: selectedLocation,
-          addressDetails,
+          addressDetails: addressDetails.trim().length >= 5 ? addressDetails.trim() : selectedLocation,
           ...(deliveryCoords ? { deliveryLat: deliveryCoords.lat, deliveryLng: deliveryCoords.lng } : {}),
           restaurantName: cartItems[0]?.restaurantName || "The Royal Kitchen",
           items: cartItems.map((i) => ({
@@ -1272,7 +1272,9 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
           initialAddress={selectedLocation}
           onClose={() => setIsLocationModalOpen(false)}
           onConfirm={(loc) => {
-            setSelectedLocation(loc.fullAddress || loc.placeTitle);
+            const exactAddr = loc.fullAddress || loc.placeTitle;
+            setSelectedLocation(exactAddr);
+            setAddressDetails(exactAddr);
             setDeliveryCoords({ lat: loc.lat, lng: loc.lng });
             setLocationMessage(`Exact GPS pin locked (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)})`);
             setIsLocationModalOpen(false);
