@@ -204,7 +204,7 @@ export default function RestaurantPartnerHub() {
       const res = await fetch("/api/orders");
       const data = await res.json();
       if (data.success && data.orders) {
-        const mapped: IncomingOrder[] = data.orders.map((o: any) => {
+        const mapped: IncomingOrder[] = data.orders.filter((o: any) => o.status !== "cancelled" && o.status !== "rejected").map((o: any) => {
           let posStatus: "incoming" | "preparing" | "ready" = "incoming";
           if (o.status === "preparing") posStatus = "preparing";
           else if (
@@ -302,7 +302,7 @@ export default function RestaurantPartnerHub() {
     }
   };
 
-  const handleReject = async (orderId: string) => {
+  const handleReject = async (orderId: string) => { setOrders((prev) => prev.filter((o) => o.id !== orderId));
     try {
       await fetch("/api/orders", {
         method: "PATCH",
