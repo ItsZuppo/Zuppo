@@ -1,13 +1,12 @@
 "use client";
 
 import BrandLogo from "@/components/BrandLogo";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ChevronLeft,
   CheckCircle2,
-  Clock,
   Bike,
   Store,
   Phone,
@@ -15,14 +14,10 @@ import {
   RefreshCw,
   MapPin,
   KeyRound,
-  Sparkles,
   Receipt,
   Check,
-  AlertCircle,
   ShoppingBag,
-  ExternalLink,
   ChefHat,
-  Home,
   Navigation,
 } from "lucide-react";
 import OrderDeliveryPin from "@/components/OrderDeliveryPin";
@@ -63,6 +58,8 @@ interface OrderDetail {
   deliveryLng?: number;
   pickupLat?: number;
   pickupLng?: number;
+  pickupAddress?: string;
+  restaurantPhone?: string;
 }
 
 export default function OrderTrackingPage() {
@@ -79,7 +76,10 @@ export default function OrderTrackingPage() {
   const fetchOrder = async () => {
     try {
       const res = await fetch(`/api/orders?id=${encodeURIComponent(orderId)}`);
-      if (res.status === 401) { router.replace("/login?role=customer"); return; }
+      if (res.status === 401) {
+        router.replace("/login?role=customer");
+        return;
+      }
       const data = await res.json();
       if (data.success && data.orders) {
         const found = data.orders.find(
@@ -88,7 +88,6 @@ export default function OrderTrackingPage() {
         if (found) {
           setOrder(found);
         } else {
-          // Do NOT fallback to random customer orders! Keep loading state or show strictly this order
           console.warn("Order not found with ID:", orderId);
         }
       }
@@ -138,7 +137,9 @@ export default function OrderTrackingPage() {
         <div className="w-12 h-12 rounded-2xl bg-orange-600 text-white flex items-center justify-center animate-pulse">
           <Bike className="w-6 h-6 animate-bounce" />
         </div>
-        <p className="text-xs font-bold text-stone-500 mt-3">Connecting to zuppo Live Tracking Grid...</p>
+        <p className="text-xs font-bold text-stone-500 mt-3">
+          Connecting to Zuppo Live Tracking Grid...
+        </p>
       </div>
     );
   }
@@ -218,7 +219,162 @@ export default function OrderTrackingPage() {
           </div>
         )}
 
-        {/* ================= 1. IN-APP SMART DELIVERY PIN CARD (ZERO SMS COST) ================= */}
+        {/* ================= 1. LIVE ORDER STATUS STEPPER & MAP (ZOMATO STYLE TOP CARD) ================= */}
+        <div className="bg-white rounded-3xl overflow-hidden border border-[#EDE5DA] shadow-sm">
+          <div className="p-5 pb-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block">
+                  {order.status === "delivered"
+                    ? "Completed"
+                    : order.status === "picked_up"
+                    ? "Rider is on the way"
+                    : order.status === "rider_assigned"
+                    ? "Rider heading to restaurant"
+                    : "Kitchen is preparing your order"}
+                </span>
+                <h2 className="text-xl font-black text-stone-900">
+                  {order.status === "delivered" ? "Order Delivered!" : "Arriving in 15–20 Mins"}
+                </h2>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
+                  order.status === "delivered"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                    : "bg-orange-50 text-orange-700 border-orange-300 animate-pulse"
+                }`}
+              >
+                {order.status === "delivered" ? "Delivered" : "Live Tracking"}
+              </span>
+            </div>
+
+            {/* Stepper Progress Bar */}
+            <div className="space-y-3 pt-1">
+              <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold text-stone-500">
+                <span className={currentStep >= 1 ? "text-orange-600 font-black" : ""}>1. Placed</span>
+                <span className={currentStep >= 2 ? "text-orange-600 font-black" : ""}>2. Kitchen</span>
+                <span className={currentStep >= 3 ? "text-orange-600 font-black" : ""}>3. On the Way</span>
+                <span className={currentStep >= 4 ? "text-emerald-600 font-black" : ""}>4. Delivered</span>
+              </div>
+
+              <div className="relative flex items-center justify-between">
+                <div className="absolute left-4 right-4 h-1 bg-[#EDE5DA] z-0" />
+                <div
+                  className="absolute left-4 h-1 bg-gradient-to-r from-orange-600 to-amber-500 z-0 transition-all duration-500"
+                  style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
+                />
+
+                {[1, 2, 3, 4].map((step) => {
+                  const isPassed = currentStep >= step;
+                  const isCurrent = currentStep === step;
+                  return (
+                    <div
+                      key={step}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs z-10 border-2 transition-all duration-300 ${
+                        isPassed
+                          ? "bg-orange-600 border-white text-white shadow-md shadow-orange-600/30"
+                          : "bg-white border-[#EDE5DA] text-stone-400"
+                      } ${isCurrent ? "scale-110 ring-4 ring-orange-500/20" : ""}`}
+                    >
+                      {isPassed ? (
+                        step === 4 && order.status === "delivered" ? (
+                          <Check className="w-4 h-4 stroke-[3]" />
+                        ) : step === 3 ? (
+                          <Bike className="w-4 h-4" />
+                        ) : step === 2 ? (
+                          <ChefHat className="w-4 h-4" />
+                        ) : (
+                          <Check className="w-4 h-4 stroke-[3]" />
+                        )
+                      ) : (
+                        step
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Live Map Integrated Directly Below Header */}
+          <div className="px-4 pb-4 space-y-3">
+            <AmbikapurDeliveryMap
+              restaurantName={order.restaurantName}
+              customerArea={order.deliveryArea}
+              orderNumber={order.orderNumber}
+              mode="customer"
+              destination={order.status === "rider_assigned" ? "pickup" : "drop"}
+              riderLocationUpdatedAt={order.riderLocationUpdatedAt}
+              riderLat={order.riderLat}
+              riderLng={order.riderLng}
+              restaurantLat={order.pickupLat}
+              restaurantLng={order.pickupLng}
+              customerLat={order.deliveryLat}
+              customerLng={order.deliveryLng}
+              height="300px"
+            />
+
+            {!["delivered", "cancelled"].includes(order.status) && (
+              <OrderDeliveryPin
+                orderId={order.id}
+                address={order.deliveryArea}
+                hasPin={Number.isFinite(order.deliveryLat) && Number.isFinite(order.deliveryLng)}
+                initialLat={order.deliveryLat}
+                initialLng={order.deliveryLng}
+                onSaved={fetchOrder}
+              />
+            )}
+
+            {/* Partner & Rider Status Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs pt-1">
+              <div className="p-3.5 bg-[#FAF7F2] rounded-2xl border border-[#EDE5DA] flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block">
+                    Kitchen Partner
+                  </span>
+                  <strong className="text-stone-900 block font-bold truncate mt-0.5">
+                    {order.restaurantName}
+                  </strong>
+                  <span className="text-[10px] text-stone-500 truncate block">
+                    {order.pickupAddress || "Ambikapur Kitchen"}
+                  </span>
+                </div>
+                {order.restaurantPhone ? (
+                  <a
+                    href={`tel:${order.restaurantPhone}`}
+                    className="w-9 h-9 rounded-full bg-white border border-[#E5DDD2] flex items-center justify-center text-stone-700 hover:text-orange-600 transition shadow-2xs shrink-0"
+                    title="Call Restaurant"
+                  >
+                    <Phone className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                    <Store className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 bg-[#FAF7F2] rounded-2xl border border-[#EDE5DA] flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
+                    Delivery Partner
+                  </span>
+                  <strong className="text-stone-900 block font-bold truncate mt-0.5">
+                    {order.riderName || "Assigning Rider…"}
+                  </strong>
+                  <span className="text-[10px] text-stone-500 block">
+                    {order.riderName ? "Verified Zuppo Fleet" : "Waiting for kitchen ready"}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Bike className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= 2. IN-APP SMART DELIVERY PIN CARD (ZERO SMS COST) ================= */}
         <div className="bg-white rounded-3xl p-6 border-2 border-orange-200/90 shadow-[0_20px_50px_rgba(255,100,0,0.08)] space-y-4 relative overflow-hidden">
           <div className="flex items-center justify-between pb-2 border-b border-[#EDE5DA]">
             <div className="flex items-center gap-2">
@@ -235,8 +391,8 @@ export default function OrderTrackingPage() {
               </div>
             </div>
 
-            {/* Regenerate PIN Button */}
             <button
+              type="button"
               onClick={handleRegeneratePin}
               disabled={isRegeneratingPin || order.status === "delivered"}
               className="text-[11px] font-bold text-stone-600 hover:text-orange-600 disabled:opacity-40 bg-[#FAF7F2] hover:bg-orange-50 border border-[#E5DDD2] px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
@@ -247,7 +403,6 @@ export default function OrderTrackingPage() {
             </button>
           </div>
 
-          {/* Big 4-Digit Boxes */}
           <div className="text-center py-2 space-y-2">
             <div className="flex justify-center items-center gap-3">
               {pinDigits.map((digit, idx) => (
@@ -273,149 +428,7 @@ export default function OrderTrackingPage() {
           </div>
         </div>
 
-        {/* ================= 2. LIVE ORDER STATUS STEPPER ================= */}
-        <div className="bg-white rounded-3xl p-6 border border-[#EDE5DA] shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-stone-400 block">
-                Estimated Delivery Time
-              </span>
-              <h2 className="text-xl font-black text-stone-900">
-                {order.status === "delivered" ? "Order Delivered!" : "Arriving in 15–20 Mins"}
-              </h2>
-            </div>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                order.status === "delivered"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                  : "bg-orange-50 text-orange-700 border-orange-300 animate-pulse"
-              }`}
-            >
-              {order.status === "delivered" ? "Completed" : "Live In Progress"}
-            </span>
-          </div>
-
-          {/* Stepper Progress Bar */}
-          <div className="space-y-4 pt-1">
-            <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold text-stone-500">
-              <span className={currentStep >= 1 ? "text-orange-600 font-black" : ""}>1. Placed</span>
-              <span className={currentStep >= 2 ? "text-orange-600 font-black" : ""}>2. Kitchen</span>
-              <span className={currentStep >= 3 ? "text-orange-600 font-black" : ""}>3. On the Way</span>
-              <span className={currentStep >= 4 ? "text-emerald-600 font-black" : ""}>4. Delivered</span>
-            </div>
-
-            {/* Stepper Visual Circles */}
-            <div className="relative flex items-center justify-between">
-              <div className="absolute left-4 right-4 h-1 bg-[#EDE5DA] z-0" />
-              <div
-                className="absolute left-4 h-1 bg-gradient-to-r from-orange-600 to-amber-500 z-0 transition-all duration-500"
-                style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
-              />
-
-              {[1, 2, 3, 4].map((step) => {
-                const isPassed = currentStep >= step;
-                const isCurrent = currentStep === step;
-                return (
-                  <div
-                    key={step}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs z-10 border-2 transition-all duration-300 ${
-                      isPassed
-                        ? "bg-orange-600 border-white text-white shadow-md shadow-orange-600/30"
-                        : "bg-white border-[#EDE5DA] text-stone-400"
-                    } ${isCurrent ? "scale-110 ring-4 ring-orange-500/20" : ""}`}
-                  >
-                    {isPassed ? (
-                      step === 4 && order.status === "delivered" ? (
-                        <Check className="w-4 h-4 stroke-[3]" />
-                      ) : step === 3 ? (
-                        <Bike className="w-4 h-4" />
-                      ) : step === 2 ? (
-                        <ChefHat className="w-4 h-4" />
-                      ) : (
-                        <Check className="w-4 h-4 stroke-[3]" />
-                      )
-                    ) : (
-                      step
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* ================= 3. AMBIKAPUR INTERACTIVE OPENSTREETMAP / LEAFLET ================= */}
-        <div className="bg-white rounded-3xl overflow-hidden border border-[#EDE5DA] shadow-xs space-y-3 p-4">
-          <div className="px-1 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-orange-600" />
-              <h4 className="text-xs font-black uppercase tracking-wider text-stone-900">
-                Live Ambikapur Delivery Route
-              </h4>
-            </div>
-            <span className="text-[10px] font-bold text-stone-400">
-              OpenStreetMap Engine
-            </span>
-          </div>
-
-          {/* Leaflet Live Map Component */}
-          <AmbikapurDeliveryMap
-            restaurantName={order.restaurantName}
-            customerArea={order.deliveryArea}
-            orderNumber={order.orderNumber}
-            mode="customer"
-            destination={order.status==="rider_assigned"?"pickup":"drop"}
-            riderLocationUpdatedAt={order.riderLocationUpdatedAt}
-            riderLat={order.riderLat}
-            riderLng={order.riderLng}
-            restaurantLat={order.pickupLat}
-            restaurantLng={order.pickupLng}
-            customerLat={order.deliveryLat}
-            customerLng={order.deliveryLng}
-            height="270px"
-          />
-
-          {!["delivered","cancelled"].includes(order.status)&&<OrderDeliveryPin orderId={order.id} address={order.deliveryArea} hasPin={Number.isFinite(order.deliveryLat)&&Number.isFinite(order.deliveryLng)} onSaved={fetchOrder}/>}
-
-          {/* Partner & Rider Contact Cards */}
-          <div className="p-4 grid grid-cols-2 gap-2 text-xs">
-            {/* Restaurant Card */}
-            <div className="p-3 bg-[#FAF7F2] rounded-2xl border border-[#EDE5DA] flex items-center justify-between">
-              <div>
-                <strong className="text-stone-900 block font-bold truncate">
-                  {order.restaurantName}
-                </strong>
-                <span className="text-[10px] text-stone-500">Gandhi Chowk</span>
-              </div>
-              <a
-                href="tel:9826144551"
-                className="w-8 h-8 rounded-full bg-white border border-[#E5DDD2] flex items-center justify-center text-stone-700 hover:text-orange-600 transition shadow-2xs"
-                title="Call Restaurant"
-              >
-                <Phone className="w-3.5 h-3.5" />
-              </a>
-            </div>
-
-            {/* Rider Card */}
-            <div className="p-3 bg-[#FAF7F2] rounded-2xl border border-[#EDE5DA] flex items-center justify-between">
-              <div>
-                <strong className="text-stone-900 block font-bold truncate">
-                  {order.riderName || "Rider Assigned"}
-                </strong>
-                <span className="text-[10px] text-emerald-600 font-bold">zuppo Fleet</span>
-              </div>
-              <a
-                href={`tel:${order.customerPhone}`}
-                className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition shadow-xs"
-                title="Call Rider"
-              >
-                <Phone className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* ================= 4. BILL BREAKDOWN & ITEMS ================= */}
+        {/* ================= 3. BILL BREAKDOWN & ITEMS ================= */}
         <div className="bg-white rounded-3xl p-6 border border-[#EDE5DA] shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#EDE5DA]">
             <div className="flex items-center gap-2">
@@ -429,7 +442,6 @@ export default function OrderTrackingPage() {
             </span>
           </div>
 
-          {/* Items List */}
           <div className="space-y-2.5 text-xs">
             {order.items.map((item, idx) => (
               <div key={idx} className="flex justify-between items-center text-stone-700">
@@ -441,7 +453,6 @@ export default function OrderTrackingPage() {
             ))}
           </div>
 
-          {/* Pricing Totals */}
           <div className="pt-3 border-t border-[#EDE5DA] space-y-1.5 text-xs text-stone-500">
             <div className="flex justify-between">
               <span>Item Subtotal</span>
@@ -473,7 +484,7 @@ export default function OrderTrackingPage() {
 
       {/* Footer */}
       <footer className="py-4 text-center text-xs text-stone-400 border-t border-[#EDE6DC]">
-        © 2026 zuppo Technologies • Real-time OpenStreetMap Tracking • Zero-SMS Handshake
+        © 2026 Zuppo Technologies • Live Delivery Tracking • Zero-SMS Handshake
       </footer>
     </div>
   );

@@ -223,7 +223,13 @@ export async function POST(req: Request) {
     const itemTotal = Math.round(items.reduce((sum: number, i: any) => sum+i.subtotal, 0)*100)/100;
     const total = Math.round((itemTotal + DELIVERY_FEE + PLATFORM_FEE)*100)/100;
     if (Math.abs(Number(body.totalAmount)-total) > 0.01 || !Number.isFinite(Number(body.totalAmount))) return NextResponse.json({ success: false, error: "Prices have changed. Refresh the menu and check your bill before ordering." }, { status: 409 });
-    const km = distanceKm({ lat: Number(restaurant.latitude), lng: Number(restaurant.longitude) }, coords);
+    const restLat = validCoords(Number(restaurant.latitude), Number(restaurant.longitude))
+      ? Number(restaurant.latitude)
+      : (resolveAmbikapurCoords(String(restaurant.area || restaurant.address || ""))?.lat ?? 23.12);
+    const restLng = validCoords(Number(restaurant.latitude), Number(restaurant.longitude))
+      ? Number(restaurant.longitude)
+      : (resolveAmbikapurCoords(String(restaurant.area || restaurant.address || ""))?.lng ?? 83.1985);
+    const km = distanceKm({ lat: restLat, lng: restLng }, coords);
     const row = {
       order_number: `#ZB-${randomUUID()}`, restaurant_id: restaurantId, restaurant_name: restaurant.name,
       customer_id: user.id, customer_name: String(body.customerName || user.name).trim(), customer_phone: phone,
