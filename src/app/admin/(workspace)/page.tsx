@@ -472,6 +472,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const cancelOrderByAdmin = async (orderId: string, orderNumber: string) => {
+    if (!window.confirm(`Cancel Order ${orderNumber}?`)) return;
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, status: "cancelled" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Order ${orderNumber} has been cancelled.`);
+        fetchOrders();
+      } else {
+        showToast(`Cancel failed: ${data.error}`);
+      }
+    } catch (e) {
+      showToast(`Error cancelling order: ${e}`);
+    }
+  };
+
   const toggleRestaurantStatus = async (id: string, currentIsOpen: boolean) => {
     try {
       const newStatus = !currentIsOpen;

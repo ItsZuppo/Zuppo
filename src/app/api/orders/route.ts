@@ -301,7 +301,7 @@ export async function PATCH(req: Request) {
         if (!isAdmin && !ownsKitchen) {
           return NextResponse.json({ success: false, error: "This order belongs to another kitchen." }, { status: 403 });
         }
-        if (!["placed", "preparing", "ready"].includes(record.status)) {
+        if (isAdmin && status === "cancelled" ? ["delivered", "cancelled"].includes(record.status) : !["placed", "preparing", "ready"].includes(record.status)) {
           return NextResponse.json({ success: false, error: `Order already ${record.status}.` }, { status: 409 });
         }
       } else if (RIDER_STATUSES.includes(status)) {
