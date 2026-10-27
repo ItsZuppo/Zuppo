@@ -991,7 +991,7 @@ export default function AdminDashboard() {
                                 </button>
                                 {ord.status !== "delivered" && ord.status !== "cancelled" && (
                                   <button
-                                    onClick={() => void cancelOrderByAdmin(ord.id)}
+                                    onClick={() => void cancelOrderByAdmin(ord.id, ord.orderNumber || ord.id)}
                                     className="bg-red-950/60 hover:bg-red-900/80 border border-red-800/60 text-red-300 px-2.5 py-1.5 rounded-xl transition text-[11px] font-bold"
                                   >
                                     Cancel

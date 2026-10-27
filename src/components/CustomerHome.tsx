@@ -1266,13 +1266,14 @@ export default function CustomerHome({ initialProfile, initialPromotions }: { in
       {/* Ambikapur Location Picker Modal */}
       {isLocationModalOpen && (
         <ZomatoLocationModal
-          initialCoords={deliveryCoords}
+          open={isLocationModalOpen}
+          initialLat={deliveryCoords?.lat}
+          initialLng={deliveryCoords?.lng}
           initialAddress={selectedLocation}
           onClose={() => setIsLocationModalOpen(false)}
           onConfirm={(loc) => {
-            setSelectedLocation(loc.label);
-            setDeliveryCoords({ lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy });
-            setDeliveryDetails((current) => ({ ...current, area: loc.area }));
+            setSelectedLocation(loc.fullAddress || loc.placeTitle);
+            setDeliveryCoords({ lat: loc.lat, lng: loc.lng });
             setLocationMessage(`Exact GPS pin locked (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)})`);
             setIsLocationModalOpen(false);
           }}
