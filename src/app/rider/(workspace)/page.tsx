@@ -750,7 +750,7 @@ export default function RiderDashboard() {
                         destination={order.status==="rider_assigned" ? "pickup" : "drop"}
                         customerLat={order.deliveryLat}
                         customerLng={order.deliveryLng}
-                        height="200px"
+                        height="320px"
                       />
                     </div>
 

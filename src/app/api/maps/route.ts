@@ -157,6 +157,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action") || "route";
 
+  if (action === "key") {
+    return NextResponse.json({ key: GOOGLE_KEY });
+  }
+
   // 1. Reverse Geocoding (Lat/Lng -> Accurate Ambikapur Chowk / Street / POI in English)
   if (action === "geocode") {
     const lat = Number(searchParams.get("lat"));

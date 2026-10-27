@@ -4,6 +4,7 @@ import type { Map as LeafletMap, Polygon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ArrowLeft, CheckCircle2, LocateFixed } from "lucide-react";
 import { DELIVERY_CENTER, isServiceable, validCoords } from "@/lib/delivery";
+import { browserReverseGeocode } from "@/lib/googleMapsBrowser";
 
 interface ZomatoLocationModalProps {
   open: boolean;
@@ -65,15 +66,11 @@ export default function ZomatoLocationModal({
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
     geocodeTimer.current = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/maps?action=geocode&lat=${newLat}&lng=${newLng}`);
-        const d = await r.json();
-        if (d.success && d.address) {
-          const parts = String(d.address).split(",");
-          setPlaceTitle(parts[0]?.trim() || "Ambikapur");
-          setFullAddress(d.address);
-        }
+        const res = await browserReverseGeocode(newLat, newLng);
+        setPlaceTitle(res.placeTitle || "Ambikapur");
+        setFullAddress(res.fullAddress);
       } catch {}
-    }, 320);
+    }, 280);
   };
 
   useEffect(() => {

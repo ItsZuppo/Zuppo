@@ -100,7 +100,7 @@ export default function OrderTrackingPage() {
 
   useEffect(() => {
     fetchOrder();
-    const interval = setInterval(fetchOrder, 3000);
+    const interval = setInterval(fetchOrder, 2000);
     return () => clearInterval(interval);
   }, [orderId]);
 

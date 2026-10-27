@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { LocateFixed, CheckCircle2, ArrowLeft } from "lucide-react";
 import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 import { DELIVERY_CENTER, validCoords } from "@/lib/delivery";
+import { browserReverseGeocode } from "@/lib/googleMapsBrowser";
 
 export default function OrderDeliveryPin({
   orderId,
@@ -54,15 +55,11 @@ export default function OrderDeliveryPin({
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
     geocodeTimer.current = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/maps?action=geocode&lat=${newLat}&lng=${newLng}`);
-        const d = await r.json();
-        if (d.success && d.address) {
-          const parts = String(d.address).split(",");
-          setPlaceTitle(parts[0]?.trim() || "Selected Location");
-          setDetails(d.address);
-        }
+        const res = await browserReverseGeocode(newLat, newLng);
+        setPlaceTitle(res.placeTitle || "Selected Location");
+        setDetails(res.fullAddress);
       } catch {}
-    }, 350);
+    }, 280);
   };
 
   useEffect(() => {
