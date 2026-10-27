@@ -33,10 +33,14 @@ export default function ZomatoLocationModal({
   const [lng, setLng] = useState<number>(
     validCoords(initialLat, initialLng) ? initialLng! : DELIVERY_CENTER.lng
   );
+  const cleanInitAddr = initialAddress
+    .replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, "")
+    .replace(/^,\s*/, "")
+    .trim() || "Gandhi Chowk, Ambikapur";
   const [placeTitle, setPlaceTitle] = useState<string>(
-    initialAddress.split(",")[0]?.trim() || "Gandhi Chowk"
+    cleanInitAddr.split(",")[0]?.trim() || "Gandhi Chowk"
   );
-  const [fullAddress, setFullAddress] = useState<string>(initialAddress);
+  const [fullAddress, setFullAddress] = useState<string>(cleanInitAddr);
   const [houseDetails, setHouseDetails] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -120,6 +124,7 @@ export default function ZomatoLocationModal({
           updatePolygon(c.lat, c.lng);
           reverseGeocode(c.lat, c.lng);
         });
+        reverseGeocode(lat, lng);
       } catch {}
     })();
 
@@ -265,6 +270,7 @@ export default function ZomatoLocationModal({
           {/* Quick Ambikapur Area Chips */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {[
+              { name: "Bilaspur Chowk", lat: 23.1038, lng: 83.1872 },
               { name: "Gandhi Chowk", lat: 23.12341, lng: 83.1933 },
               { name: "Ghadi Chowk", lat: 23.12295, lng: 83.19799 },
               { name: "Kedarpur", lat: 23.11559, lng: 83.20455 },
