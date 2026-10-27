@@ -314,7 +314,7 @@ export default function OrderTrackingPage() {
               height="300px"
             />
 
-            {!["delivered", "cancelled"].includes(order.status) && (
+            {order.status !== "delivered" && (
               <OrderDeliveryPin
                 orderId={order.id}
                 address={order.deliveryArea}

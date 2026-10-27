@@ -1,8 +1,8 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
-import type { Map as LeafletMap } from "leaflet";
+import type { Map as LeafletMap, Polygon } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin, Navigation, Check } from "lucide-react";
+import { LocateFixed, CheckCircle2, ArrowLeft } from "lucide-react";
 import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 import { DELIVERY_CENTER, validCoords } from "@/lib/delivery";
 
@@ -23,18 +23,32 @@ export default function OrderDeliveryPin({
 }) {
   const [open, setOpen] = useState(false);
   const [details, setDetails] = useState(address);
+  const [placeTitle, setPlaceTitle] = useState(
+    address?.split(",")[0]?.trim() || "Gandhi Chowk"
+  );
   const [lat, setLat] = useState(
     validCoords(initialLat, initialLng) ? String(initialLat) : String(DELIVERY_CENTER.lat)
   );
   const [lng, setLng] = useState(
     validCoords(initialLat, initialLng) ? String(initialLng) : String(DELIVERY_CENTER.lng)
   );
-  const [detectedArea, setDetectedArea] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
+  const polygonRef = useRef<Polygon | null>(null);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updatePolygon = (cLat: number, cLng: number) => {
+    polygonRef.current?.setLatLngs([
+      [cLat + 0.00055, cLng - 0.00045],
+      [cLat + 0.00065, cLng + 0.00035],
+      [cLat + 0.00015, cLng + 0.00065],
+      [cLat - 0.00050, cLng + 0.00040],
+      [cLat - 0.00055, cLng - 0.00035],
+      [cLat - 0.00010, cLng - 0.00060],
+    ]);
+  };
 
   const reverseGeocode = (newLat: number, newLng: number) => {
     if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
@@ -43,11 +57,12 @@ export default function OrderDeliveryPin({
         const r = await fetch(`/api/maps?action=geocode&lat=${newLat}&lng=${newLng}`);
         const d = await r.json();
         if (d.success && d.address) {
-          setDetectedArea(d.address);
-          setDetails((prev) => (!prev || prev.length < 10 ? d.address : prev));
+          const parts = String(d.address).split(",");
+          setPlaceTitle(parts[0]?.trim() || "Selected Location");
+          setDetails(d.address);
         }
       } catch {}
-    }, 450);
+    }, 350);
   };
 
   useEffect(() => {
@@ -66,21 +81,39 @@ export default function OrderDeliveryPin({
           center: [startLat, startLng],
           zoom: 17,
           zoomControl: false,
+          attributionControl: false,
         });
-        L.control.zoom({ position: "bottomright" }).addTo(instance);
         mapRef.current = instance;
 
-        // Google Maps Standard Roadmap Tiles
-        L.tileLayer("https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+        L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
           maxZoom: 20,
-          subdomains: ["0", "1", "2", "3"],
         }).addTo(instance);
+
+        // Zomato-style Blue POI Polygon around the selected location
+        polygonRef.current = L.polygon([], {
+          color: "#3b82f6",
+          weight: 2,
+          fillColor: "#60a5fa",
+          fillOpacity: 0.24,
+        }).addTo(instance);
+        updatePolygon(startLat, startLng);
+
+        setTimeout(() => {
+          if (!cancelled && instance) instance.invalidateSize({ pan: false });
+        }, 120);
+
+        instance.on("move", () => {
+          if (!instance) return;
+          const c = instance.getCenter();
+          updatePolygon(c.lat, c.lng);
+        });
 
         instance.on("moveend", () => {
           if (!instance) return;
           const c = instance.getCenter();
           setLat(c.lat.toFixed(6));
           setLng(c.lng.toFixed(6));
+          updatePolygon(c.lat, c.lng);
           reverseGeocode(c.lat, c.lng);
         });
       } catch {}
@@ -91,12 +124,13 @@ export default function OrderDeliveryPin({
       if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
       instance?.remove();
       mapRef.current = null;
+      polygonRef.current = null;
     };
   }, [open]);
 
   function locate() {
     if (!navigator.geolocation || !window.isSecureContext) {
-      setMessage("Open the live HTTPS website on your phone to capture GPS.");
+      setMessage("Open the HTTPS website on your phone to capture GPS.");
       return;
     }
     setBusy(true);
@@ -107,24 +141,21 @@ export default function OrderDeliveryPin({
         const newLng = p.coords.longitude.toFixed(6);
         setLat(newLat);
         setLng(newLng);
-        mapRef.current?.setView([Number(newLat), Number(newLng)], 18, { animate: true });
+        mapRef.current?.setView([Number(newLat), Number(newLng)], 17, { animate: true });
+        updatePolygon(Number(newLat), Number(newLng));
         reverseGeocode(Number(newLat), Number(newLng));
         setBusy(false);
-        setMessage("GPS pin locked! Drag map to fine-tune your exact gate/doorstep, then save.");
+        setMessage("");
       },
       () => {
         setBusy(false);
-        setMessage("Could not access phone GPS. Drag the map below to place the pin on your house.");
+        setMessage("Drag the map to place the pin on your exact building/gate.");
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
   }
 
   async function save() {
-    if (!lat.trim() || !lng.trim()) {
-      setMessage("Move the map pin or tap 'Use Current GPS' first.");
-      return;
-    }
     setBusy(true);
     try {
       const r = await fetch("/api/orders", {
@@ -135,108 +166,145 @@ export default function OrderDeliveryPin({
           action: "delivery-pin",
           deliveryLat: Number(lat),
           deliveryLng: Number(lng),
-          deliveryAddress: details,
+          deliveryAddress: details.trim().length >= 8 ? details : `${placeTitle}, ${details}, Ambikapur`,
         }),
       });
       const d = await r.json();
       if (!d.success) throw Error(d.error);
-      setMessage("Doorstep pin updated! Rider's route is now synced.");
+      setMessage("Location confirmed!");
       setOpen(false);
       onSaved();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not save delivery pin.");
+      setMessage(e instanceof Error ? e.message : "Could not save delivery location.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="rounded-2xl border border-orange-200/80 bg-orange-50/50 p-3.5 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
-            <MapPin size={15} />
-          </div>
-          <div>
-            <p className="text-xs font-black text-stone-900">
-              {hasPin ? "Exact Doorstep Pin Saved" : "Doorstep GPS Pin Missing"}
+    <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-xs">
+      {/* Compact Zomato Summary Strip */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block">
+              YOUR LOCATION
+            </span>
+            <p className="text-xs font-extrabold text-stone-900 truncate">
+              {placeTitle}
             </p>
-            <p className="text-[11px] text-stone-500">
-              {hasPin
-                ? "Rider is navigating to your pinned gate"
-                : "Set your pin on Google Maps for fast doorstep delivery"}
-            </p>
+            <p className="text-[11px] text-stone-500 truncate">{details}</p>
           </div>
         </div>
         <button
           type="button"
           disabled={busy}
           onClick={() => setOpen((v) => !v)}
-          className="rounded-xl bg-white border border-orange-200 hover:bg-orange-100/60 px-3 py-1.5 text-xs font-bold text-orange-700 shadow-2xs transition cursor-pointer"
+          className="text-xs font-extrabold text-[#EF4F5F] hover:opacity-80 uppercase tracking-wide shrink-0 cursor-pointer"
         >
-          {open ? "Close" : hasPin ? "Adjust Pin" : "Set Pin on Map"}
+          {open ? "CLOSE" : "CHANGE"}
         </button>
       </div>
 
+      {/* Full Zomato "Select delivery location" Drawer */}
       {open && (
-        <div className="space-y-3 pt-1">
-          <div className="relative h-56 w-full overflow-hidden rounded-2xl border border-orange-200 bg-stone-100 shadow-inner">
-            <div ref={mapContainerRef} className="h-full w-full z-0" />
-            <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center">
-              <div className="-translate-y-4 flex flex-col items-center">
-                <div className="rounded-full bg-stone-900 px-2.5 py-0.5 text-[10px] font-black text-white shadow-md mb-1">
-                  Move map to pin gate
+        <div className="border-t border-stone-100">
+          {/* Interactive Map Area with Black Pill Pin & Blue Polygon */}
+          <div className="relative w-full bg-[#e8ede5]" style={{ height: "280px" }}>
+            <div ref={mapContainerRef} style={{ width: "100%", height: "280px" }} />
+
+            {/* Top-Left Back Button */}
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="absolute left-3 top-3 z-[800] flex h-9 w-9 items-center justify-center rounded-full bg-white text-stone-800 shadow-md hover:bg-stone-50 cursor-pointer"
+            >
+              <ArrowLeft size={16} />
+            </button>
+
+            {/* Center Zomato Black Pill Pin */}
+            <div className="pointer-events-none absolute inset-0 z-[700] flex items-center justify-center">
+              <div className="-translate-y-5 flex flex-col items-center">
+                <div className="rounded-full bg-stone-900 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-lg whitespace-nowrap max-w-[220px] truncate">
+                  {placeTitle}
                 </div>
-                <div className="text-3xl drop-shadow-md">📍</div>
+                <div className="h-3 w-0.5 bg-stone-900" />
+                <div className="h-3.5 w-3.5 rounded-full bg-stone-900 border-2 border-white shadow-md" />
               </div>
             </div>
+
+            {/* Bottom-Left Google Watermark */}
+            <div className="pointer-events-none absolute bottom-2.5 left-3 z-[800] select-none font-sans text-sm font-black tracking-tight text-stone-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.95)]">
+              Google
+            </div>
+
+            {/* Bottom-Right GPS Target Crosshair Button */}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={locate}
+              title="Use my current GPS"
+              className="absolute bottom-3 right-3 z-[800] flex h-10 w-10 items-center justify-center rounded-full bg-white text-stone-900 shadow-lg border border-stone-200 hover:bg-stone-50 active:scale-95 transition cursor-pointer"
+            >
+              <LocateFixed size={18} />
+            </button>
           </div>
 
-          {detectedArea && (
-            <div className="rounded-xl bg-white border border-orange-200/80 px-3 py-2 text-[11px] text-stone-700">
-              <strong className="text-orange-600">Detected Location: </strong>
-              <span>{detectedArea}</span>
+          {/* Bottom White Sheet (Exact Zomato Screenshot 2 Layout) */}
+          <div className="bg-white p-4 space-y-3.5">
+            <h4 className="text-base font-extrabold text-stone-900">
+              Select delivery location
+            </h4>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block">
+                YOUR LOCATION
+              </span>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <strong className="text-sm font-extrabold text-stone-900 block truncate">
+                      {placeTitle}
+                    </strong>
+                    <span className="text-xs text-stone-500 block leading-snug">
+                      {details}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={locate}
+                  className="text-xs font-extrabold text-[#EF4F5F] uppercase shrink-0 cursor-pointer"
+                >
+                  GPS
+                </button>
+              </div>
             </div>
-          )}
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={locate}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-orange-300 bg-white hover:bg-orange-50 p-2.5 text-xs font-black text-orange-700 shadow-2xs transition cursor-pointer"
-          >
-            <Navigation size={14} />
-            <span>Use My Current GPS Location</span>
-          </button>
-
-          <label className="block text-xs font-bold text-stone-700">
-            House / Flat No., Floor & Nearby Landmark
-            <textarea
+            <input
+              type="text"
               value={details}
               onChange={(e) => setDetails(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded-xl border border-orange-200 bg-white p-2.5 text-xs font-medium text-stone-900 outline-none focus:border-orange-500"
-              maxLength={500}
-              placeholder="e.g. House 14, Near Sharma Medical, Gandhi Chowk"
+              placeholder="House / Flat No., Floor, Building & Landmark"
+              className="w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs font-medium text-stone-900 outline-none focus:border-[#EF4F5F] focus:bg-white"
             />
-          </label>
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={save}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 p-3 text-xs font-black text-white shadow-md transition cursor-pointer disabled:opacity-50"
-          >
-            <Check size={15} />
-            <span>{busy ? "Saving Pin…" : "Confirm & Save Doorstep Pin"}</span>
-          </button>
+            {message && (
+              <p className="text-xs font-semibold text-[#EF4F5F]">{message}</p>
+            )}
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={save}
+              className="w-full rounded-xl bg-[#EF4F5F] hover:bg-[#e03e4e] active:scale-[0.99] py-3.5 text-sm font-extrabold text-white shadow-md shadow-[#EF4F5F]/25 transition cursor-pointer disabled:opacity-50"
+            >
+              {busy ? "Confirming…" : "Confirm location"}
+            </button>
+          </div>
         </div>
-      )}
-
-      {message && (
-        <p role="status" className="text-[11px] font-semibold text-orange-800 bg-orange-100/70 px-3 py-1.5 rounded-xl">
-          {message}
-        </p>
       )}
     </div>
   );

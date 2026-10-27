@@ -2,6 +2,7 @@
 import { fetchWithTimeout as fetch } from "@/lib/browserRequest";
 
 import BrandLogo from "@/components/BrandLogo";
+import ZomatoLocationModal from "@/components/ZomatoLocationModal";
 import type { HomeBanner, HomeSettings } from "@/lib/homeSettings";
 import { HomeAnnouncement, RestaurantHero, useHomeSettings } from "@/components/HomePromotions";
 import { isServiceable } from "@/lib/delivery";
