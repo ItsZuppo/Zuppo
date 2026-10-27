@@ -66,17 +66,23 @@ export default function AmbikapurDeliveryMap({
   const drop: Point = validCoords(customerLat, customerLng)
     ? [customerLat!, customerLng!]
     : [DELIVERY_CENTER.lat - 0.0025, DELIVERY_CENTER.lng + 0.0035];
-  const rider: Point | null = validCoords(riderLat, riderLng)
+  const rawRider: Point | null = validCoords(riderLat, riderLng)
     ? [riderLat!, riderLng!]
     : null;
+  // Always display the rider bike on the map (starts at restaurant pickup until live phone GPS arrives)
+  const rider: Point = rawRider || [pickup[0] + 0.00018, pickup[1] - 0.00018];
 
-  const target = destination === "pickup" ? pickup : drop;
-  const origin = rider || (destination === "drop" ? pickup : null);
-  const routeFromKey = origin?.map((n) => String(Math.round(n * 2500) / 2500)).join(",") || "";
-  const routeToKey = target?.join(",") || "";
+  const isPickupLeg =
+    destination === "pickup" &&
+    rawRider !== null &&
+    distanceKm({ lat: rawRider[0], lng: rawRider[1] }, { lat: pickup[0], lng: pickup[1] }) > 0.04;
+  const target: Point = isPickupLeg ? pickup : drop;
+  const origin: Point = isPickupLeg ? rawRider! : rawRider || pickup;
+  const routeFromKey = origin.map((n) => String(Math.round(n * 5000) / 5000)).join(",");
+  const routeToKey = target.map((n) => String(Math.round(n * 5000) / 5000)).join(",");
 
   const gpsAge = riderLocationUpdatedAt ? now - Date.parse(riderLocationUpdatedAt) : Infinity;
-  const isLiveGps = Boolean(rider && Number.isFinite(gpsAge) && gpsAge >= -5000 && gpsAge < 60000);
+  const isLiveGps = Boolean(rawRider && Number.isFinite(gpsAge) && gpsAge >= -15000 && gpsAge < 90000);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000);
@@ -340,7 +346,7 @@ export default function AmbikapurDeliveryMap({
     (async () => {
       try {
         const r = await fetch(
-          `/api/maps?action=route&fromLat=${from[0]}&fromLng=${from[1]}&toLat=${to[0]}&toLng=${to[1]}`,
+          `/api/maps?action=route&fromLat=${from[0]}&fromLng=${from[1]}&toLat=${to[0]}&toLng=${to[1]}&riderLat=${rider[0]}&riderLng=${rider[1]}`,
           { signal: controller.signal }
         );
         const d = await r.json();
@@ -349,6 +355,9 @@ export default function AmbikapurDeliveryMap({
 
         line.current?.setLatLngs(d.coordinates);
         dashedLine.current?.setLatLngs([]);
+        if (typeof d.bearing === "number" && Number.isFinite(d.bearing)) {
+          riderBearing.current = d.bearing;
+        }
 
         const kmStr = String(d.distanceKm);
         const mins = Number(d.durationMinutes);

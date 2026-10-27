@@ -110,17 +110,70 @@ export default function RiderDashboard() {
   // Live GPS Tracking & Synchronization
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<"active" | "denied" | "idle" | "requesting" | "error">("idle");
-  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [gpsEnabled, setGpsEnabled] = useState(true);
   const [gpsMessage, setGpsMessage] = useState("");
+  const applyGpsFix = (pos: GeolocationPosition) => {
+    const lat = Number(pos.coords.latitude.toFixed(6));
+    const lng = Number(pos.coords.longitude.toFixed(6));
+    setGpsCoords({ lat, lng });
+    setGpsStatus("active");
+    setGpsEnabled(true);
+    setIsOnline(true);
+    setGpsMessage(`Live GPS active (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+    const activeOrder = ordersRef.current.find(
+      (o) => o.riderId === userRef.current?.id && (o.status === "picked_up" || o.status === "rider_assigned")
+    );
+    if (activeOrder && !syncInFlightRef.current) {
+      syncInFlightRef.current = true;
+      fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: activeOrder.id, riderLat: lat, riderLng: lng }),
+      })
+        .then((r) => {
+          if (r.ok) {
+            lastBroadcastRef.current = { lat, lng };
+            lastBroadcastOrderRef.current = activeOrder.id;
+            lastBroadcastAtRef.current = Date.now();
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          syncInFlightRef.current = false;
+        });
+    }
+  };
   const startGps = () => {
-    setGpsEnabled(false);
-    if (!window.isSecureContext || !navigator.geolocation) { setGpsStatus("error"); setGpsMessage("GPS needs HTTPS. Open the live website in your phone browser."); return; }
-    setGpsStatus("requesting"); setGpsMessage("Waiting for location permission / GPS…");
-    navigator.geolocation.getCurrentPosition(pos => {
-      setGpsCoords({lat:pos.coords.latitude,lng:pos.coords.longitude});
-      setGpsStatus("active"); setGpsEnabled(true); setIsOnline(true);
-      setGpsMessage("GPS enabled. Location is shared only for your assigned active delivery.");
-    }, err => { setGpsStatus(err.code === 1 ? "denied" : "error"); setGpsMessage(err.code === 1 ? "Location is blocked. Open your browser site settings, allow Location, then tap Retry GPS." : "Could not get a GPS fix. Turn on phone Location and retry outdoors."); }, {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    if (typeof window === "undefined" || !window.isSecureContext || !navigator.geolocation) {
+      setGpsStatus("error");
+      setGpsMessage("GPS needs HTTPS. Open the live website in your phone browser.");
+      return;
+    }
+    setGpsEnabled(true);
+    setGpsStatus((prev) => (prev === "active" ? "active" : "requesting"));
+    setGpsMessage("Locking live phone GPS…");
+    navigator.geolocation.getCurrentPosition(
+      applyGpsFix,
+      (err) => {
+        if (err.code === 1) {
+          setGpsStatus("denied");
+          setGpsMessage("Location is blocked. Allow Location in browser site settings, then tap Retry GPS.");
+          return;
+        }
+        // Fallback to network/fused location if satellite high-accuracy times out indoors
+        navigator.geolocation.getCurrentPosition(
+          applyGpsFix,
+          (err2) => {
+            if (!gpsCoords) {
+              setGpsStatus(err2.code === 1 ? "denied" : "error");
+              setGpsMessage("Could not get a GPS fix. Turn on phone Location and tap Retry GPS.");
+            }
+          },
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 3000 }
+    );
   };
   const lastBroadcastRef = useRef<{ lat: number; lng: number } | null>(null);
   const syncInFlightRef = useRef(false);
@@ -139,29 +192,38 @@ export default function RiderDashboard() {
     if (!isOnline) {setGpsStatus("idle");return;}
     if (!gpsEnabled) return;
 
-    let watchId: number;
+    startGps();
+    let watchId: number | undefined;
     try {
       watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const lat = Number(pos.coords.latitude.toFixed(6));
-          const lng = Number(pos.coords.longitude.toFixed(6));
-          setGpsCoords({ lat, lng });
-          setGpsStatus("active");
-
-
-        },
+        applyGpsFix,
         (err) => {
-          console.log("GPS Notice:", err.message);
-          setGpsStatus(err.code === 1 ? "denied" : "error");
-          setGpsMessage(err.code === 1 ? "Location access was blocked. Allow Location in browser site settings, then retry." : "GPS signal unavailable. Turn on device Location and retry.");
+          if (err.code === 1) {
+            setGpsStatus("denied");
+            setGpsMessage("Location access was blocked. Allow Location in browser site settings, then retry.");
+          }
         },
-        { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 2500, timeout: 12000 }
       );
-    } catch (e) {
-      setGpsStatus("error");
-    }
+    } catch (e) {}
+
+    const heartbeat = setInterval(() => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        applyGpsFix,
+        () => {
+          navigator.geolocation.getCurrentPosition(applyGpsFix, () => {}, {
+            enableHighAccuracy: false,
+            maximumAge: 15000,
+            timeout: 8000,
+          });
+        },
+        { enableHighAccuracy: true, maximumAge: 2500, timeout: 6000 }
+      );
+    }, 4000);
 
     return () => {
+      clearInterval(heartbeat);
       if (watchId !== undefined && navigator.geolocation?.clearWatch) {
         navigator.geolocation.clearWatch(watchId);
       }
@@ -305,6 +367,14 @@ export default function RiderDashboard() {
       pollSequence.current++;
       hasAutoSwitched.current=true;
       setLiveOrders(prev=>[data.order,...prev.filter(o=>o.id!==orderId)]);setActiveTab("active");
+      startGps();
+      if (gpsCoords) {
+        fetch("/api/orders", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, riderLat: gpsCoords.lat, riderLng: gpsCoords.lng }),
+        }).catch(() => {});
+      }
       setStatusMessage(pickup?"Pickup confirmed. Navigate to the customer's saved pin.":"Task accepted. Go to the restaurant, then confirm pickup.");
     }catch(e){setStatusMessage(e instanceof Error?e.message:"Connection failed. Refresh to check the task before retrying.");}
     finally{actionLock.current=false;setActionOrderId(null);fetchRiderOrders();}
@@ -672,9 +742,9 @@ export default function RiderDashboard() {
                         restaurantName={order.restaurantName}
                         customerArea={order.deliveryArea}
                         orderNumber={order.orderNumber}
-                        riderLocationUpdatedAt={gpsStatus === "active" ? new Date().toISOString() : undefined}
-                        riderLat={gpsStatus === "active" ? gpsCoords?.lat : undefined}
-                        riderLng={gpsStatus === "active" ? gpsCoords?.lng : undefined}
+                        riderLocationUpdatedAt={gpsCoords ? new Date().toISOString() : undefined}
+                        riderLat={gpsCoords?.lat ?? order.riderLat}
+                        riderLng={gpsCoords?.lng ?? order.riderLng}
                         restaurantLat={order.pickupLat}
                         restaurantLng={order.pickupLng}
                         destination={order.status==="rider_assigned" ? "pickup" : "drop"}
